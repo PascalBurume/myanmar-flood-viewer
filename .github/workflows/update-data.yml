@@ -43,7 +43,7 @@ jobs:
             echo "active=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         if: steps.window.outputs.active == 'true'
 
       - name: GDAL（ogr2ogr）を入れる
@@ -61,7 +61,7 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         if: steps.window.outputs.active == 'true'
         with:
           node-version: 20
