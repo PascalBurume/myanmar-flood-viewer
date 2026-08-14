@@ -24,7 +24,7 @@
 
     <div id="panel-body" class="panel-body">
       <p class="notice">
-        2026年8月13日の大雨による千葉県大網白里市周辺の<strong>推定</strong>浸水域です。
+        2026年8月13日の大雨による千葉県内の<strong>推定</strong>浸水域です。
         SNS写真から読み取った浸水深をもとに防災科研が試算した速報値であり、
         実際の浸水範囲・浸水深とは異なります。
       </p>
@@ -42,12 +42,20 @@
         </div>
         <div id="layers" class="toggles"></div>
       </div>
+
+      <div class="field">
+        <div class="field-head">
+          <span class="field-label">対象地点</span>
+        </div>
+        <div id="datasets" class="toggles"></div>
+      </div>
     </div>
 
     <footer class="panel-foot">
       <p class="disclaimer">本サイトは個人が作成・配信するものであり、防災科学技術研究所の公式サイトではありません。</p>
       データ: <a href="https://mizu.bosai.go.jp/key/20260813" target="_blank" rel="noopener">防災科研 水・土砂防災研究部門「2026年8月13日の千葉県での大雨」</a><br />
       背景: <a href="https://github.com/gsi-cyberjapan/optimal_bvmap" target="_blank" rel="noopener">国土地理院 最適化ベクトルタイル</a> / <a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">地理院タイル</a><br />
+      <span id="data-updated" class="build-ver"></span>
       <span id="build-ver" class="build-ver"></span>
     </footer>
   </section>

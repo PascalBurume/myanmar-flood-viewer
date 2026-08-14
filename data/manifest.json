@@ -1,0 +1,35 @@
+{
+  "checkedAt": "2026-08-14T06:44:12+00:00",
+  "source": "https://mizu.bosai.go.jp/wiki2/wiki.cgi?page=2026%C7%AF8%B7%EE13%C6%FC%A4%CE%C0%E9%CD%D5%B8%A9%A4%C7%A4%CE%C2%E7%B1%AB",
+  "datasets": {
+    "JR_Oami_Station": {
+      "sha256": "62eeb8a534d1e042f9ec66bc1f0b6fe1c25fe0b9398b7d577d3800e57646a27e",
+      "size": 56920,
+      "index": {
+        "id": "JR_Oami_Station",
+        "name": "千葉県大網白里市（JR大網駅周辺）",
+        "sourceFile": "JR_Oami_Station_shp.zip",
+        "layers": {
+          "floodarea": {
+            "path": "data/JR_Oami_Station/floodarea.geojson",
+            "features": 4
+          },
+          "inputarea": {
+            "path": "data/JR_Oami_Station/inputarea.geojson",
+            "features": 1
+          },
+          "inputpoint": {
+            "path": "data/JR_Oami_Station/inputpoint.geojson",
+            "features": 1
+          }
+        },
+        "bbox": [
+          140.298739,
+          35.517775,
+          140.320125,
+          35.538032
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,124 @@
+name: update-data
+
+# 防災科研の公開ページを半日に1回走査し、推定浸水域データが更新されていたら
+# 取得・変換して main に反映し、GitHub Pages を再デプロイする。
+on:
+  schedule:
+    # UTC 01:00 / 13:00 = JST 10:00 / 22:00。cron はGitHub側の混雑で数分〜十数分遅れることがある。
+    - cron: '0 1,13 * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: '変更が無くても再取得・再変換してデプロイする'
+        type: boolean
+        default: false
+
+# 走査を続ける期限。速報データの更新が落ち着いたらここを延ばすか、ワークフローを削除する。
+# 無期限に回し続けて出典サイトへ無駄なリクエストを送らないよう、明示的に切る。
+# （GitHub 自体もリポジトリが60日間非アクティブだと schedule を自動停止する。）
+env:
+  SCAN_UNTIL: '2026-09-14'
+
+permissions:
+  contents: write
+  issues: write
+
+# デプロイが二重に走らないよう直列化する（cronと手動実行が重なる場合に備えて）。
+concurrency:
+  group: update-data
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 走査期限の確認
+        id: window
+        run: |
+          today=$(date -u +%F)
+          if [[ "$today" > "${SCAN_UNTIL}" ]]; then
+            echo "::notice::走査期限 ${SCAN_UNTIL} を過ぎているため何もしません。継続するなら .github/workflows/update-data.yml の SCAN_UNTIL を延ばしてください。"
+            echo "active=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "active=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.window.outputs.active == 'true'
+
+      - name: GDAL（ogr2ogr）を入れる
+        if: steps.window.outputs.active == 'true'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gdal-bin
+
+      - uses: actions/setup-node@v4
+        if: steps.window.outputs.active == 'true'
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: 元ページを走査してデータを取得・変換
+        id: fetch
+        if: steps.window.outputs.active == 'true'
+        run: |
+          python3 scripts/fetch_data.py ${{ inputs.force && '--force' || '' }}
+
+      - name: 変更をコミット
+        if: steps.window.outputs.active == 'true' && steps.fetch.outputs.changed == 'true'
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add data public/data
+          if git diff --cached --quiet; then
+            echo "::notice::ハッシュは変わったが生成物に差分なし。コミットはしません。"
+          else
+            git commit \
+              -m "データ更新: $(date -u +'%Y-%m-%d %H:%M UTC')" \
+              -m "scripts/fetch_data.py による自動取得。出典: https://mizu.bosai.go.jp/key/20260813"
+            git push
+          fi
+
+      - name: npm install
+        if: steps.window.outputs.active == 'true' && steps.fetch.outputs.changed == 'true'
+        run: npm ci
+
+      - name: ビルドして GitHub Pages へデプロイ
+        if: steps.window.outputs.active == 'true' && steps.fetch.outputs.changed == 'true'
+        run: |
+          npm run build
+          npx gh-pages -d dist --nojekyll \
+            -u 'github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>'
+
+      - name: 新しい地点・未知のレイヤーが出たら Issue で知らせる
+        # 新地点は表示名の確認（元ページの見出しの誤字など）、未知のレイヤーは描画コードの追加が要る。
+        # 自動で出したまま放置しないよう、人間の確認を促す。
+        if: steps.window.outputs.active == 'true' && (steps.fetch.outputs.added != '' || steps.fetch.outputs.unknown != '')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ADDED: ${{ steps.fetch.outputs.added }}
+          UNKNOWN: ${{ steps.fetch.outputs.unknown }}
+        run: |
+          # `[[ -n "$X" ]] && echo …` の形は X が空だと終了コード1になり、
+          # bash -e で走るこのステップ自体が失敗するため if で書く。
+          {
+            echo "自動走査で、確認が必要な変化を検出しました。"
+            echo
+            if [[ -n "$ADDED" ]]; then
+              echo "## 新しい地点"
+              for d in $ADDED; do
+                echo "- \`$d\` — 表示名（public/data/index.json の name）が適切か確認してください。必要なら scripts/fetch_data.py の NAME_OVERRIDES で上書きします。"
+              done
+              echo
+            fi
+            if [[ -n "$UNKNOWN" ]]; then
+              echo "## ビューワが知らないレイヤー"
+              for l in $UNKNOWN; do
+                echo "- \`$l\` — 変換はされていますが表示されません。src/layers.ts の LAYER_KINDS に追加が必要です。"
+              done
+              echo
+            fi
+            echo "出典: https://mizu.bosai.go.jp/key/20260813"
+            echo "実行: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          } > body.md
+          gh issue create --title "確認依頼: 推定浸水域データに新しい地点/レイヤー ($(date -u +%F))" --body-file body.md

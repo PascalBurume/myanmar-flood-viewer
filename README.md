@@ -35,35 +35,53 @@ npm run preview
 技術構成: MapLibre GL JS + Vite + TypeScript。データ量が小さいため、
 ベクトルタイル化はせず GeoJSON を直接 source として読んでいます。
 
-## データの更新
+## データの自動更新
 
-元データはリビジョンが上がることがあります。再取得する場合:
+元データは速報のため更新されます。`.github/workflows/update-data.yml` が
+**半日に1回（JST 10:00 / 22:00）** 元ページを走査し、更新があれば取得・変換して
+main にコミットし、GitHub Pages を再デプロイします。
 
-1. 元ページを開き、`action=ATTACH` リンクのファイル名の版数（末尾の `(数字)`）を確認する。
+手元で走査する場合:
 
-   ```bash
-   curl -sS -L https://mizu.bosai.go.jp/key/20260813
-   ```
+```bash
+npm run check-data   # 差分の有無だけ確認（取得・変換はしない）
+npm run update-data  # 更新があれば取得・変換
+```
 
-2. zip を `data/raw/` に展開する（`page` / `file` パラメータはEUC-JPでURLエンコードされた日本語ページ名）。
+### 更新の検知方法
 
-   ```
-   https://mizu.bosai.go.jp/wiki2/wiki.cgi?page=2026%C7%AF8%B7%EE13%C6%FC%A4%CE%C0%E9%CD%D5%B8%A9%A4%C7%A4%CE%C2%E7%B1%AB&action=ATTACH&file=JR%5FOami%5FStation%5Fshp%2Ezip
-   ```
+出典サイトは更新の判定に使える手掛かりが乏しいため、zipの内容ハッシュで比べています。
 
-3. GeoJSON に変換する（`data/geojson/` と配信用の `public/data/` の両方に出力される）。
+- 添付ファイル名の隣の `(20)` のような数字は**ダウンロード数**で、版数ではない
+  （数時間で 7 → 20 と増えるのを観測）。
+- 添付ファイルのレスポンスに `Last-Modified` / `ETag` / `Content-Length` が無い（chunked）。
+  条件付きGETもサイズ比較もできない。
+- 添付ファイル一覧ページはログインが必要でエラーになる。
 
-   ```bash
-   npm run convert   # 内部で ogr2ogr を使用
-   ```
+取り込むのは元ページの「**推定浸水域データ**」節にある添付zipだけです。ページに雨量など
+別のデータが増えても拾いません。新しい地点のzipが増えた場合は自動で取り込み、
+表示名の確認を促す Issue が立ちます。
+
+### 走査の期限
+
+ワークフローの `SCAN_UNTIL`（既定: 2026-09-14、公開から約1ヶ月）を過ぎると、実行されても
+何もせず終了します。続ける場合はこの日付を延ばしてください。出典サイトへ無期限に
+リクエストを送り続けないための歯止めです。
 
 ## ディレクトリ
 
 ```
-data/raw/        ダウンロードしたシェープファイル（EPSG:4326）
-data/geojson/    変換後のGeoJSON（保管用）
-public/data/     変換後のGeoJSON（配信用、ビューワが読む）
-public/*.json    背景地図スタイル（地理院 最適化ベクトルタイル）
-src/             ビューワ本体
-scripts/         データ変換
+data/raw/<地点>/       取得したzipと展開したシェープファイル（EPSG:4326）
+data/geojson/<地点>/   変換後のGeoJSON（保管用）
+data/manifest.json     走査用の指紋（zipのsha256）
+public/data/<地点>/    変換後のGeoJSON（配信用、ビューワが読む）
+public/data/index.json データセット一覧（ビューワは実行時にこれを読む）
+public/*.json          背景地図スタイル（地理院 最適化ベクトルタイル）
+src/                   ビューワ本体
+scripts/fetch_data.py  走査・取得・変換・index生成
 ```
+
+地点が増えてもビューワのコード変更は不要です（`index.json` を実行時に読んで
+レイヤーを組み立て、初期表示範囲も全地点に合わせます）。ただし `floodarea` /
+`inputarea` / `inputpoint` 以外のレイヤーが増えた場合は `src/layers.ts` への追加が必要で、
+その場合も Issue で知らされます。

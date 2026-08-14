@@ -261,6 +261,24 @@ body {
   padding: 2px 0;
 }
 
+/* 地点の行はトグルと「移動」ボタンを横並びにする */
+.ds-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ds-item .toggle {
+  flex: 1;
+  min-width: 0;
+}
+
+.ds-item .t-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .toggle {
   position: relative;
   display: flex;

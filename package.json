@@ -9,7 +9,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "deploy": "npm run build && gh-pages -d dist --nojekyll",
-    "convert": "bash scripts/convert.sh"
+    "update-data": "python3 scripts/fetch_data.py",
+    "check-data": "python3 scripts/fetch_data.py --dry-run"
   },
   "dependencies": {
     "maplibre-gl": "^5.15.0",

@@ -31,47 +31,80 @@ const depthColorExpr = [
 export const ATTRIBUTION =
   '推定浸水域: <a href="https://mizu.bosai.go.jp/key/20260813" target="_blank" rel="noopener">防災科研 水・土砂防災研究部門</a>'
 
-export function sources(base: string): Record<string, SourceSpecification> {
-  return {
-    floodarea: { type: 'geojson', data: `${base}data/floodarea.geojson`, attribution: ATTRIBUTION },
-    inputarea: { type: 'geojson', data: `${base}data/inputarea.geojson`, attribution: ATTRIBUTION },
-    inputpoint: { type: 'geojson', data: `${base}data/inputpoint.geojson`, attribution: ATTRIBUTION },
-  }
+// ---- データセット一覧（scripts/fetch_data.py が生成する public/data/index.json） ----
+
+export interface DatasetLayerInfo {
+  path: string
+  features: number
 }
 
-/** パネルのトグル1つに対応するレイヤー群。 */
-export interface LayerGroup {
-  key: string
+export interface Dataset {
+  id: string
+  name: string
+  sourceFile: string
+  layers: Record<string, DatasetLayerInfo>
+  bbox: [number, number, number, number] | null
+}
+
+export interface DataIndex {
+  updated: string
+  source: string
+  datasets: Dataset[]
+}
+
+/**
+ * データセット一覧を読む。地点が増えてもコードを変えずに地図へ出すため、
+ * 表示対象はビルド時に固定せず実行時にこの一覧から決める。
+ */
+export async function loadIndex(base: string): Promise<DataIndex> {
+  const res = await fetch(`${base}data/index.json`)
+  if (!res.ok) throw new Error(`データ一覧を読めませんでした（HTTP ${res.status}）`)
+  return (await res.json()) as DataIndex
+}
+
+// ---- レイヤーの種類 ----
+
+export type KindKey = 'floodarea' | 'inputarea' | 'inputpoint'
+
+export interface LayerKind {
+  key: KindKey
   label: string
   desc: string
   /** 不透明度スライダーを出すか（塗りのある浸水域のみ） */
   opacity: boolean
-  /** クリックでポップアップを出す対象レイヤーID */
-  queryIds: string[]
-  layers: LayerSpecification[]
+  /** クリックでポップアップを出すか */
+  query: boolean
+  specs: (datasetId: string) => LayerSpecification[]
 }
 
-export const GROUPS: LayerGroup[] = [
+/** レイヤーID。データセットをまたいで一意にする。 */
+export const layerId = (datasetId: string, kind: KindKey, part: string): string =>
+  `${datasetId}--${kind}-${part}`
+
+export const sourceId = (datasetId: string, kind: KindKey): string => `${datasetId}--${kind}`
+
+// 配列の順がそのまま重なり順（先の要素が下）。浸水域の塗りを最下、参照地点を最上にする。
+export const LAYER_KINDS: LayerKind[] = [
   {
     key: 'floodarea',
     label: '推定浸水域',
     desc: 'SNS写真から推定した浸水深の分布。速報値であり、実際の浸水範囲・浸水深とは異なる場合があります。',
     opacity: true,
-    queryIds: ['floodarea-fill'],
-    layers: [
+    query: true,
+    specs: (ds) => [
       {
-        id: 'floodarea-fill',
+        id: layerId(ds, 'floodarea', 'fill'),
         type: 'fill',
-        source: 'floodarea',
+        source: sourceId(ds, 'floodarea'),
         paint: {
           'fill-color': depthColorExpr,
           'fill-opacity': 0.7,
         },
       } as LayerSpecification,
       {
-        id: 'floodarea-outline',
+        id: layerId(ds, 'floodarea', 'outline'),
         type: 'line',
-        source: 'floodarea',
+        source: sourceId(ds, 'floodarea'),
         paint: {
           'line-color': depthColorExpr,
           'line-width': ['interpolate', ['linear'], ['zoom'], 12, 0.3, 17, 1.2],
@@ -85,12 +118,12 @@ export const GROUPS: LayerGroup[] = [
     label: '推定に使った範囲',
     desc: '浸水深の推定計算を行った対象範囲。この枠の外は計算していないため、浸水がなかったことを意味しません。',
     opacity: false,
-    queryIds: [],
-    layers: [
+    query: false,
+    specs: (ds) => [
       {
-        id: 'inputarea-line',
+        id: layerId(ds, 'inputarea', 'line'),
         type: 'line',
-        source: 'inputarea',
+        source: sourceId(ds, 'inputarea'),
         paint: {
           'line-color': '#e5533d',
           'line-width': 2,
@@ -104,12 +137,12 @@ export const GROUPS: LayerGroup[] = [
     label: '参照地点',
     desc: 'SNS写真から浸水深を読み取った地点。ここでの実測相当値を起点に周囲の浸水深を推定しています。',
     opacity: false,
-    queryIds: ['inputpoint-circle'],
-    layers: [
+    query: true,
+    specs: (ds) => [
       {
-        id: 'inputpoint-circle',
+        id: layerId(ds, 'inputpoint', 'circle'),
         type: 'circle',
-        source: 'inputpoint',
+        source: sourceId(ds, 'inputpoint'),
         paint: {
           'circle-radius': ['interpolate', ['linear'], ['zoom'], 12, 4, 17, 8],
           'circle-color': '#ffd400',
@@ -121,11 +154,8 @@ export const GROUPS: LayerGroup[] = [
   },
 ]
 
-export const QUERY_LAYER_IDS = GROUPS.flatMap((g) => g.queryIds)
-
-const LABEL_OF: Record<string, string> = {
-  'floodarea-fill': '推定浸水域',
-  'inputpoint-circle': '参照地点',
+export function sourceSpec(base: string, info: DatasetLayerInfo): SourceSpecification {
+  return { type: 'geojson', data: `${base}${info.path}`, attribution: ATTRIBUTION }
 }
 
 /** 同じ場所に重なった地物は最大でこの数まで並べる。 */
@@ -144,6 +174,8 @@ function formatValue(key: string, value: unknown): string {
 
 export function popupHtml(
   features: { layer: { id: string }; properties: Record<string, unknown> | null }[],
+  /** レイヤーID → 見出し（「地点名 / 推定浸水域」）。地点が複数あるときどれを指しているか分かるように。 */
+  headings: Map<string, string>,
 ): string {
   const items = features.slice(0, POPUP_MAX_ITEMS).map((f) => {
     const props = f.properties ?? {}
@@ -155,7 +187,7 @@ export function popupHtml(
           `<tr><th>${escapeHtml(k)}</th><td>${escapeHtml(formatValue(k, v))}</td></tr>`,
       )
       .join('')
-    const head = LABEL_OF[f.layer.id] ?? f.layer.id
+    const head = headings.get(f.layer.id) ?? f.layer.id
     return `<div class="pop-item"><p class="pop-item-head">${escapeHtml(head)}</p><table class="pop-tbl">${rows || '<tr><td>属性なし</td></tr>'}</table></div>`
   })
   const more =
