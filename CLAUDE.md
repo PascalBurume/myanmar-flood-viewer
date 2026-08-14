@@ -70,6 +70,7 @@ Webブラウザ上の地図で閲覧できるようにするプロジェクト�
 - [x] MapLibre + Vite + TS のビューワ作成（レイヤー切替・凡例・不透明度・ポップアップ・
       背景/テーマ切替）
 - [x] ヘッドレスChromiumで表示確認（淡色/写真/ダーク、ポップアップ）
-- [ ] GitHub Pages へのデプロイ（`npm run deploy`、`vite.config.ts` の `base` は
-      `/chiba-flood-viewer/` 前提）
+- [x] GitHub Pages へデプロイ（https://shiwaku.github.io/chiba-flood-viewer/ ）
+      `npm run deploy` で `gh-pages` ブランチへ publish。`vite.config.ts` の `base` は
+      `/chiba-flood-viewer/`。リポジトリ名を変えたらここも直すこと。
 - [ ] 元データのリビジョン更新の追従
