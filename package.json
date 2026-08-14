@@ -1,0 +1,23 @@
+{
+  "name": "chiba-flood-viewer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "2026年8月13日の千葉県大雨（NIED速報）の推定浸水域ビューワ",
+  "license": "MIT",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "deploy": "npm run build && gh-pages -d dist --nojekyll",
+    "convert": "bash scripts/convert.sh"
+  },
+  "dependencies": {
+    "maplibre-gl": "^5.15.0",
+    "pmtiles": "^3.2.0"
+  },
+  "devDependencies": {
+    "gh-pages": "^6.3.0",
+    "typescript": "^5.0.0",
+    "vite": "^6.0.0"
+  }
+}
