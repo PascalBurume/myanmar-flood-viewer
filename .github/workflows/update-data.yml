@@ -92,9 +92,16 @@ jobs:
 
       - name: ビルドして GitHub Pages へデプロイ
         if: steps.window.outputs.active == 'true' && steps.fetch.outputs.changed == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           npm run build
-          npx gh-pages -d dist --nojekyll
+          # gh-pages は node_modules/.cache/gh-pages に別途 clone するため、
+          # actions/checkout がワークスペースに設定した認証情報を引き継げない
+          # （fatal: could not read Username for 'https://github.com'）。
+          # トークン付きのリモートURLを明示的に渡す。
+          npx gh-pages -d dist --nojekyll \
+            -r "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
 
       - name: 新しい地点・未知のレイヤーが出たら Issue で知らせる
         # 新地点は表示名の確認（元ページの見出しの誤字など）、未知のレイヤーは描画コードの追加が要る。
