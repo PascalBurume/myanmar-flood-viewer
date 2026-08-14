@@ -52,6 +52,15 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq gdal-bin
 
+      - name: コミット者を設定
+        # データのコミットと gh-pages の publish の両方がこの設定を使う。
+        # gh-pages の -u は RFC準拠のアドレス解析を通すため `github-actions[bot]` の
+        # 角括弧を受け付けない。-u を使わず git config で渡す。
+        if: steps.window.outputs.active == 'true'
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
       - uses: actions/setup-node@v4
         if: steps.window.outputs.active == 'true'
         with:
@@ -67,8 +76,6 @@ jobs:
       - name: 変更をコミット
         if: steps.window.outputs.active == 'true' && steps.fetch.outputs.changed == 'true'
         run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add data public/data
           if git diff --cached --quiet; then
             echo "::notice::ハッシュは変わったが生成物に差分なし。コミットはしません。"
@@ -87,8 +94,7 @@ jobs:
         if: steps.window.outputs.active == 'true' && steps.fetch.outputs.changed == 'true'
         run: |
           npm run build
-          npx gh-pages -d dist --nojekyll \
-            -u 'github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>'
+          npx gh-pages -d dist --nojekyll
 
       - name: 新しい地点・未知のレイヤーが出たら Issue で知らせる
         # 新地点は表示名の確認（元ページの見出しの誤字など）、未知のレイヤーは描画コードの追加が要る。
