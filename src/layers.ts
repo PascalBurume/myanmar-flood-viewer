@@ -59,7 +59,7 @@ export interface DataIndex {
  * Load the dataset list. What gets drawn is decided at runtime from this list rather than fixed at
  * build time, so a new location shows up on the map without a code change.
  *
- * This used to merge a second, hand-authored index on top, because the old Japanese scanner rewrote
+ * This used to merge a second, hand-authored index on top, because the old scanner rewrote
  * index.json on every run. That scanner is gone, so there is only one file again.
  */
 export async function loadIndex(base: string): Promise<DataIndex> {

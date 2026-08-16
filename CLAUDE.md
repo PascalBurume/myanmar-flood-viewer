@@ -3,12 +3,10 @@
 A self-contained Myanmar flood viewer: React front end, a zero-dependency Node server, and a
 standard-library Python pipeline. It runs, updates and serves itself from one machine.
 
-**History worth knowing.** This began as `chiba-flood-viewer`, for the 13 August 2026 Chiba floods
-in Japan. The Japanese data, its NIED scanner, the depth-class machinery and the Japan-only GSI
-basemaps were removed when the scope moved to Myanmar; the GitHub Actions workflow, the Actions API
-client and the gh-pages deploy were removed when it moved to self-hosting. Git history has all of
-it. The git remote may still carry the old name — that is a rename to make on the hosting side, and
-nothing in the code depends on it.
+**Why the early git history is in Japanese.** The repository began life as a Japanese flood viewer
+before being rebuilt for Myanmar; commits before `b0b5918` describe that work and nothing in the
+current tree depends on it. If the git remote still carries the old repository name, that is a
+rename to make on the hosting side — the code never refers to it.
 
 ## Data
 
@@ -451,34 +449,32 @@ ADAM has no backfill: only the newest event's impact table is readable, every ol
 
 ## Environment notes
 
-- Runs on WSL at `/mnt/c/Users/yshiw/Documents/GIS/chiba-flood-viewer`.
-  **This is not true everywhere** — it has also been worked on from macOS, where GDAL, tippecanoe
-  and `unzip` are all absent. `scripts/convert_unosat.py` is standard-library-only for that reason;
-  `scripts/fetch_data.py` still needs ogr2ogr and gets it from gdal-bin in CI.
-- On WSL: `ogr2ogr` (GDAL), `node` (v20), `npm` and `tippecanoe` are all available.
-  Note: the older environment note saying "neither GDAL nor pip is available" no longer applies.
-- There is no `unzip` command → Python's `zipfile` module is used instead.
-- Because it lives on /mnt/c, Vite has `watch.usePolling` enabled (inotify events do not arrive).
+**Assume nothing is installed but Python 3 and Node.** This has been worked on from both WSL and
+macOS, and the macOS machine has no GDAL, no tippecanoe and no `unzip`. That is the whole reason
+every script here is standard-library only and `convert_unosat.py` parses shapefiles and simplifies
+geometry by hand rather than shelling out to `ogr2ogr` — a pipeline that only runs on one laptop is
+not a pipeline. Python's `zipfile` stands in for `unzip`.
+
+- Node 20+ and npm for the viewer and the server; the server itself has zero dependencies.
+- `vite.config.ts` enables `watch.usePolling`, which matters when the tree sits on a Windows mount
+  under WSL: inotify events never arrive there and the dev server otherwise looks frozen. It is
+  harmless elsewhere.
+- `BASE_PATH` sets the build's base URL. It defaults to `/` (a domain root); set `/flood/` to serve
+  under a sub-path.
 
 ## Progress log
 
-- [x] git init (`main` branch)
-- [x] check the NIED page, download and extract the data
-- [x] convert to GeoJSON (ogr2ogr)
-- [x] build the MapLibre + Vite + TS viewer (layer toggles, legend, opacity, popup,
-      basemap/theme switching)
-- [x] verify rendering in headless Chromium (pale/photo/dark, popup)
-- [x] deploy to GitHub Pages (https://shiwaku.github.io/chiba-flood-viewer/)
-      `npm run deploy` publishes to the `gh-pages` branch. `base` in `vite.config.ts` is
-      `/chiba-flood-viewer/`. Fix that too if the repository is renamed.
-- [x] twice-daily automatic scan, fetch, convert and redeploy (`scripts/fetch_data.py` +
-      `.github/workflows/update-data.yml`). New locations appear with no change to the viewer.
-- [x] translate the UI, comments and docs to English (source data stays Japanese; see "UI language")
-- [x] add the English (OpenStreetMap) basemap so labels are not Japanese-only, and so the map works
-      outside Japan
-- [x] add four Myanmar locations (UNOSAT flood extent) with flood risk share statistics
-- [x] add monitoring: the multi-year trend, locally-recorded alerts, and a health endpoint
+- [x] convert the four UNOSAT extents with a standard-library-only Python converter
+- [x] build the viewer (MapLibre + Vite + TypeScript), then move the UI to React
+- [x] add UNOSAT FloodAI: nationwide, per-township exposure, discovered rather than pinned
+- [x] add WFP ADAM impact figures alongside the supplied risk shares, each labelled
+- [x] English basemaps and labels; NASA GIBS dated imagery and EOX cloud-free
+- [x] make the pipeline self-hosting: one entrypoint, own server, atomic publish, no CI service
+- [x] record the pipeline's own run state in `status.json`, on every run
+- [x] add monitoring: the multi-year trend, locally-recorded alerts, and `/api/health`
+- [x] add weather: IMERG rainfall on the map, Open-Meteo rain and GloFAS discharge forecasts
+- [x] draw the run as a live horizontal stepper fed by the pipeline's own progress markers
 - [ ] replace the *citation pending* source on the flood risk share figures
 - [ ] decide whether to extend or stop the scan when `SCAN_UNTIL` (2026-09-14) is reached
-- [ ] add drawing code if a new layer kind arrives (anything other than
-      `floodarea` / `inputarea` / `inputpoint`)
+- [ ] add drawing code if a new layer kind arrives (anything outside `LAYER_KINDS`:
+      `waterextent` / `floodextentearly` / `floodextent` / `inputarea` / `exposure`)

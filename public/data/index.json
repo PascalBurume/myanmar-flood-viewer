@@ -1,7 +1,7 @@
 {
   "updated": "2026-08-16T01:04:14+00:00",
   "source": "https://data.humdata.org/organization/unosat",
-  "note": "Myanmar flood data. UNOSAT flood extents are a hand-converted snapshot (see scripts/convert_unosat.py); the impact figures are refreshed automatically by scripts/scan_adam.py. This file was previously data/extra-index.json, kept separate because the NIED scanner rewrote index.json on every run — that scanner is gone, so it is now the primary index.",
+  "note": "Myanmar flood data. UNOSAT flood extents are a hand-converted snapshot (see scripts/convert_unosat.py); the nationwide FloodAI exposure and the WFP ADAM impact figures are refreshed automatically by the pipeline.",
   "datasets": [
     {
       "id": "MM_Yangon",
