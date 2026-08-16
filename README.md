@@ -24,6 +24,15 @@ platform, no account anywhere.
 - Region boundaries: [geoBoundaries](https://www.geoboundaries.org/) (ODbL)
 - Basemap: [© OpenStreetMap contributors](https://www.openstreetmap.org/copyright) / [OpenFreeMap](https://openfreemap.org/)
 
+### Origin
+
+This began as [shiwaku/chiba-flood-viewer](https://github.com/shiwaku/chiba-flood-viewer), a viewer
+for the August 2026 floods in Chiba, Japan, and follows the panel and theme conventions of
+[shiwaku/dm-converter](https://github.com/shiwaku/dm-converter/tree/main/viewer). It has since been
+rebuilt for Myanmar: different data sources, a React front end, a local server, and a pipeline that
+no longer depends on any hosted CI. The Japanese data, its scanner and the Japan-only basemaps are
+gone; the early commits in this repository are that original work.
+
 ## Regions
 
 | Region | Event | Imaged | Flood risk share | ADAM impact (people) |
