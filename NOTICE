@@ -1,0 +1,55 @@
+Third-party terms
+=================
+
+The MIT licence in LICENSE covers the SOURCE CODE in this repository:
+everything under src/, scripts/, server/, deploy/, and the build configuration.
+
+It does not cover the material below, which is not ours to relicense.
+
+
+Data committed in this repository
+---------------------------------
+
+public/data/ holds roughly 5 MB of third-party data, each with its own terms:
+
+  public/data/MM_*/            Flood extents and exposure, derived from UNOSAT
+                               products obtained via HDX. CC BY-SA.
+                               https://data.humdata.org/organization/unosat
+
+  Region boundaries            Used during conversion to clip extents to
+                               regions. geoBoundaries, ODbL.
+                               https://www.geoboundaries.org/
+
+  Impact figures               WFP ADAM. CC BY-SA.
+                               https://api.adam.geospatial.wfp.org
+
+Redistributing that data means honouring those licences, not the MIT one. In
+particular, CC BY-SA is a share-alike licence and an MIT file at the root of a
+repository cannot override it.
+
+
+Data fetched at run time
+------------------------
+
+The served page contacts these directly; none of it is covered by LICENSE:
+
+  NASA GIBS                    Satellite imagery and GPM IMERG rainfall.
+  Open-Meteo                   Rainfall forecasts. CC BY 4.0.
+  GloFAS / Copernicus EMS      River discharge forecasts.
+  OpenStreetMap / OpenFreeMap  Basemap. ODbL.
+  EOX Sentinel-2 cloudless     The "Cloud-free" basemap. CC BY-NC-SA 4.0.
+
+The last one is easy to get wrong: EOX Sentinel-2 cloudless is NON-COMMERCIAL,
+and that restriction applies to anything using that basemap whatever LICENSE
+says about this project's code.
+
+
+Origin
+------
+
+This project was rebuilt from https://github.com/shiwaku/chiba-flood-viewer,
+which publishes no licence of its own. The MIT grant in LICENSE is made for the
+contributions in this repository; it cannot and does not relicense the original
+author's work, which is still the base of this git history and remains under
+their copyright. Anyone intending to reuse the earliest commits should seek
+that author's permission.

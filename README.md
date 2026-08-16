@@ -30,7 +30,7 @@ Code is **MIT** (see [LICENSE](LICENSE)). The flood data committed under `public
 it is UNOSAT and WFP material under **CC BY-SA**, with boundaries from geoBoundaries under **ODbL**,
 and share-alike terms that MIT cannot override. Anything fetched at run time keeps its own licence
 too; note that the **Cloud-free** basemap (EOX Sentinel-2 cloudless) is **CC BY-NC-SA 4.0** — the NC
-means non-commercial. The LICENSE file spells all of this out.
+means non-commercial. [NOTICE](NOTICE) spells all of this out.
 
 ### Origin
 

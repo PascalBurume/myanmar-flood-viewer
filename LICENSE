@@ -19,38 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-SCOPE — please read, because this repository contains more than its own code.
-
-1. The MIT licence above covers the SOURCE CODE in this repository: everything
-   under src/, scripts/, server/, deploy/, and the build configuration.
-
-2. It does NOT cover the DATA committed under public/data/, which is
-   third-party and carries its own terms:
-
-     public/data/MM_*/ (flood extents, exposure)
-         Derived from UNOSAT products obtained via HDX, CC BY-SA.
-         https://data.humdata.org/organization/unosat
-     Region boundaries used during conversion
-         geoBoundaries, ODbL.  https://www.geoboundaries.org/
-     Impact figures
-         WFP ADAM, CC BY-SA.  https://api.adam.geospatial.wfp.org
-
-   Redistributing that data means honouring those licences, not this one. In
-   particular CC BY-SA is a share-alike licence and MIT cannot override it.
-
-3. Data fetched at RUN TIME is likewise not covered: NASA GIBS imagery and
-   GPM IMERG rainfall, Open-Meteo forecasts (CC BY 4.0), GloFAS / Copernicus
-   river discharge, OpenStreetMap via OpenFreeMap (ODbL), and EOX Sentinel-2
-   cloudless. Note that EOX Sentinel-2 cloudless is CC BY-NC-SA 4.0 — the NC
-   is non-commercial, and it applies to that basemap regardless of this
-   licence.
-
-4. This project was rebuilt from https://github.com/shiwaku/chiba-flood-viewer,
-   which publishes no licence of its own. The MIT grant above is made for the
-   contributions in this repository; it cannot and does not relicense the
-   original author's work, which remains under their copyright. Anyone
-   intending to reuse the earliest commits in this history should seek that
-   author's permission.
