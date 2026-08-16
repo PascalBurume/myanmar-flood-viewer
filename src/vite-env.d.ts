@@ -1,4 +1,4 @@
 /// <reference types="vite/client" />
 
-/** vite.config.ts の define で埋め込まれるビルド時刻。 */
+/** Build timestamp injected by the `define` block in vite.config.ts. */
 declare const __BUILD_TIME__: string

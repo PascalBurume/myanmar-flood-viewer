@@ -1,31 +1,218 @@
 {
-  "updated": "2026-08-14T08:17:03+00:00",
-  "source": "https://mizu.bosai.go.jp/wiki2/wiki.cgi?page=2026%C7%AF8%B7%EE13%C6%FC%A4%CE%C0%E9%CD%D5%B8%A9%A4%C7%A4%CE%C2%E7%B1%AB",
+  "updated": "2026-08-16T01:04:14+00:00",
+  "source": "https://data.humdata.org/organization/unosat",
+  "note": "Myanmar flood data. UNOSAT flood extents are a hand-converted snapshot (see scripts/convert_unosat.py); the impact figures are refreshed automatically by scripts/scan_adam.py. This file was previously data/extra-index.json, kept separate because the NIED scanner rewrote index.json on every run — that scanner is gone, so it is now the primary index.",
   "datasets": [
     {
-      "id": "JR_Oami_Station",
-      "name": "千葉県大網白里市（JR大網駅周辺）",
-      "sourceFile": "JR_Oami_Station_shp.zip",
+      "id": "MM_Yangon",
+      "name": "Yangon Region, Myanmar",
+      "sourceFile": "UNOSAT (HDX)",
+      "note": "Sentinel-1, 31 Aug 2021 (UNOSAT FL20210831MMR). The analysis extent barely reaches Yangon Region, so almost no flood water is mapped here — this is a gap in the imagery analysed, not evidence that the region stayed dry. The water layer is the same sensor and date as the flood layer (Sentinel-1, 2021-08-31). Two Sentinel-1 passes are published for this event: 2021-08-25 and 2021-08-31. Both are included, so the earlier layer showing through the later one is water that had drained in those six days.",
+      "stats": [
+        {
+          "label": "Flood risk share",
+          "value": 53.3,
+          "unit": "%",
+          "source": "supplied to the project; provenance not established. The four shares are exactly 16/9/4/1 of 30 records, so this is a tally, not a modelled probability.",
+          "unverified": true,
+          "count": 16,
+          "denominator": 30
+        },
+        {
+          "label": "Flood impact (people)",
+          "value": 962,
+          "unit": "",
+          "source": "WFP ADAM event FL-20260806-MMR-00 (2026-08-06), retrieved 2026-08-16"
+        }
+      ],
       "layers": {
-        "floodarea": {
-          "path": "data/JR_Oami_Station/floodarea.geojson",
-          "features": 4
+        "floodextent": {
+          "path": "data/MM_Yangon/floodextent.geojson",
+          "features": 19
         },
         "inputarea": {
-          "path": "data/JR_Oami_Station/inputarea.geojson",
+          "path": "data/MM_Yangon/inputarea.geojson",
           "features": 1
         },
-        "inputpoint": {
-          "path": "data/JR_Oami_Station/inputpoint.geojson",
-          "features": 1
+        "waterextent": {
+          "path": "data/MM_Yangon/waterextent.geojson",
+          "features": 663
+        },
+        "floodextentearly": {
+          "path": "data/MM_Yangon/floodextentearly.geojson",
+          "features": 104
         }
       },
       "bbox": [
-        140.298739,
-        35.517775,
-        140.320125,
-        35.538032
+        96.66682,
+        16.58114,
+        96.82213,
+        16.8837
+      ],
+      "focus": true,
+      "group": "Myanmar"
+    },
+    {
+      "id": "MM_Bago",
+      "name": "Bago Region, Myanmar",
+      "sourceFile": "UNOSAT (HDX)",
+      "note": "Sentinel-1, 31 Aug 2021 (UNOSAT FL20210831MMR). The water layer is the same sensor and date as the flood layer (Sentinel-1, 2021-08-31). Two Sentinel-1 passes are published for this event: 2021-08-25 and 2021-08-31. Both are included, so the earlier layer showing through the later one is water that had drained in those six days.",
+      "stats": [
+        {
+          "label": "Flood risk share",
+          "value": 30.0,
+          "unit": "%",
+          "source": "supplied to the project; provenance not established. The four shares are exactly 16/9/4/1 of 30 records, so this is a tally, not a modelled probability.",
+          "unverified": true,
+          "count": 9,
+          "denominator": 30
+        },
+        {
+          "label": "Flood impact (people)",
+          "value": 153336,
+          "unit": "",
+          "source": "WFP ADAM event FL-20260806-MMR-00 (2026-08-06), retrieved 2026-08-16"
+        }
+      ],
+      "layers": {
+        "floodextent": {
+          "path": "data/MM_Bago/floodextent.geojson",
+          "features": 1753
+        },
+        "inputarea": {
+          "path": "data/MM_Bago/inputarea.geojson",
+          "features": 1
+        },
+        "waterextent": {
+          "path": "data/MM_Bago/waterextent.geojson",
+          "features": 2596
+        },
+        "floodextentearly": {
+          "path": "data/MM_Bago/floodextentearly.geojson",
+          "features": 2113
+        }
+      },
+      "bbox": [
+        96.49931,
+        16.84235,
+        96.97506,
+        17.67995
+      ],
+      "focus": true,
+      "group": "Myanmar"
+    },
+    {
+      "id": "MM_Mandalay",
+      "name": "Mandalay Region, Myanmar",
+      "sourceFile": "UNOSAT (HDX)",
+      "note": "Sentinel-1, 24 Sep 2024, Typhoon Yagi (UNOSAT FL20240912MMR). Nay Pyi Taw Union Territory is excluded — geoBoundaries ADM1 still draws it inside Mandalay Region, which would double-count it. Note: the water layer for this region comes from Gaofen-3 imaged 2024-09-15, a different satellite and nine days earlier than the flood layer (Sentinel-1, 2024-09-24) — UNOSAT published no Sentinel-1 water extent for this event. Treat the two as separate observations, not a before/after pair.",
+      "stats": [
+        {
+          "label": "Flood risk share",
+          "value": 13.3,
+          "unit": "%",
+          "source": "supplied to the project; provenance not established. The four shares are exactly 16/9/4/1 of 30 records, so this is a tally, not a modelled probability.",
+          "unverified": true,
+          "count": 4,
+          "denominator": 30
+        }
+      ],
+      "layers": {
+        "floodextent": {
+          "path": "data/MM_Mandalay/floodextent.geojson",
+          "features": 3817
+        },
+        "inputarea": {
+          "path": "data/MM_Mandalay/inputarea.geojson",
+          "features": 2
+        },
+        "waterextent": {
+          "path": "data/MM_Mandalay/waterextent.geojson",
+          "features": 828
+        }
+      },
+      "bbox": [
+        95.80627,
+        20.25083,
+        96.29636,
+        22.57541
+      ],
+      "focus": true,
+      "group": "Myanmar"
+    },
+    {
+      "id": "MM_NayPyiTaw",
+      "name": "Nay Pyi Taw Union Territory, Myanmar",
+      "sourceFile": "UNOSAT (HDX)",
+      "note": "Sentinel-1, 24 Sep 2024, Typhoon Yagi (UNOSAT FL20240912MMR). Note: the water layer for this region comes from Gaofen-3 imaged 2024-09-15, a different satellite and nine days earlier than the flood layer (Sentinel-1, 2024-09-24) — UNOSAT published no Sentinel-1 water extent for this event. Treat the two as separate observations, not a before/after pair.",
+      "stats": [
+        {
+          "label": "Flood risk share",
+          "value": 3.3,
+          "unit": "%",
+          "source": "supplied to the project; provenance not established. The four shares are exactly 16/9/4/1 of 30 records, so this is a tally, not a modelled probability.",
+          "unverified": true,
+          "count": 1,
+          "denominator": 30
+        }
+      ],
+      "layers": {
+        "floodextent": {
+          "path": "data/MM_NayPyiTaw/floodextent.geojson",
+          "features": 561
+        },
+        "inputarea": {
+          "path": "data/MM_NayPyiTaw/inputarea.geojson",
+          "features": 2
+        },
+        "waterextent": {
+          "path": "data/MM_NayPyiTaw/waterextent.geojson",
+          "features": 272
+        }
+      },
+      "bbox": [
+        96.07677,
+        19.47787,
+        96.31835,
+        20.29305
+      ],
+      "focus": true,
+      "group": "Myanmar"
+    },
+    {
+      "id": "MM_FloodAI",
+      "name": "Myanmar — nationwide flood exposure",
+      "sourceFile": "UNOSAT FloodAI AI20260814MMR",
+      "note": "AI-detected surface water from Sentinel-1, observed 2026-08-08, covering the whole country — 207 townships with an observation. Radar underestimates water under dense vegetation and in built-up areas, and the population figures are modelled from WorldPop, which can overestimate in cities. Preliminary, not field-validated.",
+      "layers": {
+        "exposure": {
+          "path": "data/MM_FloodAI/exposure.geojson",
+          "features": 207
+        }
+      },
+      "bbox": [
+        93.26541,
+        15.99563,
+        97.26213,
+        26.30116
+      ],
+      "group": "Myanmar",
+      "stats": [
+        {
+          "label": "People exposed (nationwide)",
+          "value": 616059,
+          "unit": "",
+          "source": "UNOSAT FloodAI AI20260814MMR, observed 2026-08-08, retrieved 2026-08-16"
+        }
       ]
     }
-  ]
+  ],
+  "converted": "2026-08-15",
+  "adamEvent": {
+    "id": "FL-20260806-MMR-00",
+    "effective": "2026-08-06",
+    "cleared": "no",
+    "retrieved": "2026-08-16T01:04:17+00:00",
+    "peopleTotal": 154298
+  }
 }

@@ -1,9 +1,0 @@
-{
-"type": "FeatureCollection",
-"name": "inputpoint",
-"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" } },
-"bbox": [ 140.312340, 35.528303, 140.312340, 35.528303 ],                                                                          
-"features": [
-{ "type": "Feature", "properties": { "浸水深": 0.5 }, "bbox": [ 140.31234, 35.528303, 140.31234, 35.528303 ], "geometry": { "type": "Point", "coordinates": [ 140.31234, 35.528303 ] } }
-]
-}

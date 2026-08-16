@@ -1,0 +1,14 @@
+[Unit]
+Description=Myanmar flood viewer — twice-daily update
+
+[Timer]
+# Twice a day. Sentinel-1 revisit is days, so this is not chasing the satellite; it is making sure
+# a new product is picked up within hours of publication rather than whenever someone looks.
+OnCalendar=*-*-* 01,13:17:00 UTC
+# Catch up after downtime, so a machine that was off overnight updates on boot instead of waiting
+# for the next slot and leaving the page stale for another twelve hours.
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

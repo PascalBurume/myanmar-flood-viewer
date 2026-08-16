@@ -1,41 +1,28 @@
-import type { ExpressionSpecification, LayerSpecification, SourceSpecification } from 'maplibre-gl'
-
-/** 浸水深の区分。dbf の gridcode（1〜4）と浸水深（文字列）が 1:1 で対応している。 */
-export interface DepthClass {
-  code: number
-  label: string
-  color: string
-}
-
-// 洪水浸水想定区域図の法定色ではなく青系の連続配色を使う。
-// これは公表されたハザードマップではなく SNS 写真からの「推定」であり、
-// 法定図と同じ色で描くと同等の根拠があるものと誤解されるため。
-export const DEPTH_CLASSES: DepthClass[] = [
-  { code: 1, label: '0.5m未満', color: '#c6dbef' },
-  { code: 2, label: '0.5m以上1m未満', color: '#6baed6' },
-  { code: 3, label: '1m以上2m未満', color: '#2171b5' },
-  { code: 4, label: '2m以上', color: '#08306b' },
-]
-
-/**
- * gridcode → 色 の match 式。区分外は灰色にして取りこぼしを目視で気付けるようにする。
- * 区分を配列から展開する都合でタプル型が保てないため、式仕様へは明示的にキャストする。
- */
-const depthColorExpr = [
-  'match',
-  ['get', 'gridcode'],
-  ...DEPTH_CLASSES.flatMap((d) => [d.code, d.color]),
-  '#9aa0a6',
-] as unknown as ExpressionSpecification
+import type { LayerSpecification, SourceSpecification } from 'maplibre-gl'
 
 export const ATTRIBUTION =
-  '推定浸水域: <a href="https://mizu.bosai.go.jp/key/20260813" target="_blank" rel="noopener">防災科研 水・土砂防災研究部門</a>'
+  'Flood extents: <a href="https://data.humdata.org/organization/unosat" target="_blank" rel="noopener">UNOSAT via HDX</a> (CC BY-SA)'
 
-// ---- データセット一覧（scripts/fetch_data.py が生成する public/data/index.json） ----
+// ---- Dataset list (public/data/index.json) ----
 
 export interface DatasetLayerInfo {
   path: string
   features: number
+}
+
+/** A published figure about a location, shown in the panel and the popup. */
+export interface Stat {
+  label: string
+  value: number
+  unit?: string
+  /** Where the number came from. Shown in the panel so a figure is never presented unsourced. */
+  source?: string
+  /**
+   * Set when the provenance of a figure is not established. It is then marked in the UI rather
+   * than footnoted, because a number sitting next to sourced ones reads as equally sourced unless
+   * something says otherwise — and on a flood map that is a real way to mislead.
+   */
+  unverified?: boolean
 }
 
 export interface Dataset {
@@ -44,6 +31,22 @@ export interface Dataset {
   sourceFile: string
   layers: Record<string, DatasetLayerInfo>
   bbox: [number, number, number, number] | null
+  /** Optional per-location figures, shown as a ranked bar list in the panel. */
+  stats?: Stat[]
+  /** Optional free-text note, e.g. the event and date a layer was captured. */
+  note?: string
+  /**
+   * Optional label tying several datasets together, e.g. "Myanmar". When present it produces an
+   * "About <group>" button opening a summary of that group. Kept in the index rather than in code
+   * so a future group needs no viewer change.
+   */
+  group?: string
+  /**
+   * Optional. When any dataset sets this, the initial view fits only the flagged ones.
+   * Flagging is data, not code, so which area the viewer opens on stays a property of the index
+   * rather than something hardcoded here.
+   */
+  focus?: boolean
 }
 
 export interface DataIndex {
@@ -53,61 +56,148 @@ export interface DataIndex {
 }
 
 /**
- * データセット一覧を読む。地点が増えてもコードを変えずに地図へ出すため、
- * 表示対象はビルド時に固定せず実行時にこの一覧から決める。
+ * Load the dataset list. What gets drawn is decided at runtime from this list rather than fixed at
+ * build time, so a new location shows up on the map without a code change.
+ *
+ * This used to merge a second, hand-authored index on top, because the old Japanese scanner rewrote
+ * index.json on every run. That scanner is gone, so there is only one file again.
  */
 export async function loadIndex(base: string): Promise<DataIndex> {
-  const res = await fetch(`${base}data/index.json`)
-  if (!res.ok) throw new Error(`データ一覧を読めませんでした（HTTP ${res.status}）`)
+  const res = await fetch(`${base}data/index.json`, { cache: 'no-store' })
+  if (!res.ok) throw new Error(`Could not load the dataset index (HTTP ${res.status})`)
   return (await res.json()) as DataIndex
 }
 
-// ---- レイヤーの種類 ----
+/**
+ * Display-name overrides, keyed by dataset id. The index already carries English names, so this is
+ * only needed when a source's own wording should not be shown as-is.
+ */
+export const DATASET_NAMES: Record<string, string> = {}
 
-export type KindKey = 'floodarea' | 'inputarea' | 'inputpoint'
+export const datasetName = (ds: Dataset): string => DATASET_NAMES[ds.id] ?? ds.name
+
+// ---- Layer kinds ----
+
+export type KindKey = 'waterextent' | 'floodextentearly' | 'floodextent' | 'inputarea' | 'exposure'
+
+/**
+ * Colour for satellite-detected flood extent. Deliberately a single flat colour, not the depth
+ * ramp: UNOSAT publishes where water was observed, with no depth attached, and a graded scale would
+ * imply a measurement that does not exist in the data.
+ */
+export const EXTENT_COLOR = '#1f7a8c'
+
+/**
+ * Colour for total surface water. Deliberately duller and greyer than EXTENT_COLOR so the flood
+ * layer stacked above it stays the thing the eye goes to — this layer is context, not the finding.
+ */
+export const WATER_COLOR = '#8fa8bd'
+
+/**
+ * Colour for the earlier satellite pass. A different hue rather than a lighter teal, because the
+ * two dates are separate observations to compare, not steps on one scale — and where this colour
+ * shows through the later layer, it means water that had drained away by then.
+ */
+export const EARLY_COLOR = '#8c6bb1'
+
+/**
+ * Colour for population exposure. Warm, because it is the only layer about people rather than
+ * water — the eye should not read it as another shade of flood.
+ */
+export const EXPOSURE_COLOR = '#e8703a'
 
 export interface LayerKind {
   key: KindKey
   label: string
   desc: string
-  /** 不透明度スライダーを出すか（塗りのある浸水域のみ） */
+  /** Whether to show an opacity slider (only the flooded area, which has a fill) */
   opacity: boolean
-  /** クリックでポップアップを出すか */
+  /** Whether a click opens a popup */
   query: boolean
   specs: (datasetId: string) => LayerSpecification[]
 }
 
-/** レイヤーID。データセットをまたいで一意にする。 */
+/** Layer ID. Unique across datasets. */
 export const layerId = (datasetId: string, kind: KindKey, part: string): string =>
   `${datasetId}--${kind}-${part}`
 
 export const sourceId = (datasetId: string, kind: KindKey): string => `${datasetId}--${kind}`
 
-// 配列の順がそのまま重なり順（先の要素が下）。浸水域の塗りを最下、参照地点を最上にする。
+// Array order is stacking order (earlier is lower). Flood fill at the bottom, reference point on top.
 export const LAYER_KINDS: LayerKind[] = [
   {
-    key: 'floodarea',
-    label: '推定浸水域',
-    desc: 'SNS写真から推定した浸水深の分布。速報値であり、実際の浸水範囲・浸水深とは異なる場合があります。',
+    // Listed before floodextent so it draws underneath: this is the baseline, flood water sits on it.
+    key: 'waterextent',
+    label: 'All surface water',
+    desc: 'Every water surface UNOSAT detected, permanent rivers and lakes included. Roughly speaking, what this shows minus the flood layer is the water that is normally there — useful for telling new flooding apart from a river doing what it always does. Check the imaging date in the popup: for some regions it comes from a different satellite and date than the flood layer, so the two are not a strict before/after pair.',
     opacity: true,
     query: true,
     specs: (ds) => [
       {
-        id: layerId(ds, 'floodarea', 'fill'),
+        id: layerId(ds, 'waterextent', 'fill'),
         type: 'fill',
-        source: sourceId(ds, 'floodarea'),
-        paint: {
-          'fill-color': depthColorExpr,
-          'fill-opacity': 0.7,
-        },
+        source: sourceId(ds, 'waterextent'),
+        paint: { 'fill-color': WATER_COLOR, 'fill-opacity': 0.7 },
       } as LayerSpecification,
       {
-        id: layerId(ds, 'floodarea', 'outline'),
+        id: layerId(ds, 'waterextent', 'outline'),
         type: 'line',
-        source: sourceId(ds, 'floodarea'),
+        source: sourceId(ds, 'waterextent'),
         paint: {
-          'line-color': depthColorExpr,
-          'line-width': ['interpolate', ['linear'], ['zoom'], 12, 0.3, 17, 1.2],
+          'line-color': WATER_COLOR,
+          'line-width': ['interpolate', ['linear'], ['zoom'], 8, 0.2, 15, 0.6],
+          'line-opacity': 0.8,
+        },
+      } as LayerSpecification,
+    ],
+  },
+  {
+    // Drawn under `floodextent` so the later pass wins where they overlap. What is left showing in
+    // this colour is water present on the earlier date and gone by the later one.
+    key: 'floodextentearly',
+    label: 'Flood water (earlier pass)',
+    desc: 'The same detection from an earlier satellite pass, for regions where UNOSAT published more than one date. Where this colour shows through, water was there earlier and had drained by the later date; where only the main flood colour shows, it arrived later. Each popup carries its own imaging date.',
+    opacity: true,
+    query: true,
+    specs: (ds) => [
+      {
+        id: layerId(ds, 'floodextentearly', 'fill'),
+        type: 'fill',
+        source: sourceId(ds, 'floodextentearly'),
+        paint: { 'fill-color': EARLY_COLOR, 'fill-opacity': 0.7 },
+      } as LayerSpecification,
+      {
+        id: layerId(ds, 'floodextentearly', 'outline'),
+        type: 'line',
+        source: sourceId(ds, 'floodextentearly'),
+        paint: {
+          'line-color': EARLY_COLOR,
+          'line-width': ['interpolate', ['linear'], ['zoom'], 8, 0.2, 15, 0.6],
+          'line-opacity': 0.8,
+        },
+      } as LayerSpecification,
+    ],
+  },
+  {
+    key: 'floodextent',
+    label: 'Detected flood water',
+    desc: 'Flood water detected in Sentinel-1 radar imagery by UNOSAT. This is observed extent on one date, not depth, and radar misses water under dense vegetation or inside buildings. Geometry is simplified for display — read the area off the popup rather than measuring it.',
+    opacity: true,
+    query: true,
+    specs: (ds) => [
+      {
+        id: layerId(ds, 'floodextent', 'fill'),
+        type: 'fill',
+        source: sourceId(ds, 'floodextent'),
+        paint: { 'fill-color': EXTENT_COLOR, 'fill-opacity': 0.7 },
+      } as LayerSpecification,
+      {
+        id: layerId(ds, 'floodextent', 'outline'),
+        type: 'line',
+        source: sourceId(ds, 'floodextent'),
+        paint: {
+          'line-color': EXTENT_COLOR,
+          'line-width': ['interpolate', ['linear'], ['zoom'], 8, 0.2, 15, 0.8],
           'line-opacity': 0.9,
         },
       } as LayerSpecification,
@@ -115,8 +205,8 @@ export const LAYER_KINDS: LayerKind[] = [
   },
   {
     key: 'inputarea',
-    label: '推定に使った範囲',
-    desc: '浸水深の推定計算を行った対象範囲。この枠の外は計算していないため、浸水がなかったことを意味しません。',
+    label: 'Estimation extent',
+    desc: 'The area the analysis actually covered. Nothing outside this outline was assessed, so blank ground beyond it does not mean there was no flooding — it means nobody looked.',
     opacity: false,
     query: false,
     specs: (ds) => [
@@ -133,66 +223,111 @@ export const LAYER_KINDS: LayerKind[] = [
     ],
   },
   {
-    key: 'inputpoint',
-    label: '参照地点',
-    desc: 'SNS写真から浸水深を読み取った地点。ここでの実測相当値を起点に周囲の浸水深を推定しています。',
-    opacity: false,
+    // Last in the array, so it draws above every water layer: these are the people, and they should
+    // never be hidden underneath the thing that happened to them.
+    key: 'exposure',
+    label: 'People exposed (nationwide)',
+    desc: "UNOSAT's AI detector run over Sentinel-1 for the whole country, then crossed with WorldPop. One circle per township, sized by the number of people under detected water. This is the only layer that covers all of Myanmar and the only one measured in people — the flood layers above it are hand-traced extents for four regions. Radar underestimates water under vegetation and in built-up areas, and WorldPop can overestimate urban populations.",
+    opacity: true,
     query: true,
     specs: (ds) => [
       {
-        id: layerId(ds, 'inputpoint', 'circle'),
+        id: layerId(ds, 'exposure', 'fill'),
         type: 'circle',
-        source: sourceId(ds, 'inputpoint'),
+        source: sourceId(ds, 'exposure'),
         paint: {
-          'circle-radius': ['interpolate', ['linear'], ['zoom'], 12, 4, 17, 8],
-          'circle-color': '#ffd400',
-          'circle-stroke-color': '#333333',
-          'circle-stroke-width': 1.5,
+          // Area-proportional rather than radius-proportional: doubling the radius quadruples the
+          // ink, which would read as four times the people.
+          'circle-radius': [
+            'interpolate',
+            ['linear'],
+            ['sqrt', ['max', ['get', 'People exposed'], 1]],
+            1, 2,
+            50, 8,
+            160, 18,
+            400, 34,
+          ],
+          'circle-color': EXPOSURE_COLOR,
+          'circle-opacity': 0.55,
+          'circle-stroke-color': EXPOSURE_COLOR,
+          'circle-stroke-width': 1,
+          'circle-stroke-opacity': 0.9,
         },
       } as LayerSpecification,
     ],
   },
 ]
 
-export function sourceSpec(base: string, info: DatasetLayerInfo): SourceSpecification {
-  return { type: 'geojson', data: `${base}${info.path}`, attribution: ATTRIBUTION }
+/**
+ * URL for a layer's GeoJSON, optionally version-stamped.
+ *
+ * The stamp matters more than it looks. Paths like `data/MM_Bago/floodextent.geojson` are
+ * byte-identical strings from one update to the next, so refreshing a source with the same URL gets
+ * the previous body straight back out of the browser cache or the Pages CDN — the refresh would
+ * report success and change nothing on screen. Passing the index's `updated` timestamp makes the
+ * URL change exactly when the data does.
+ */
+export function layerUrl(base: string, info: DatasetLayerInfo, version?: string): string {
+  const url = `${base}${info.path}`
+  return version ? `${url}?v=${encodeURIComponent(version)}` : url
 }
 
-/** 同じ場所に重なった地物は最大でこの数まで並べる。 */
+export function sourceSpec(
+  base: string,
+  info: DatasetLayerInfo,
+  version?: string,
+): SourceSpecification {
+  return { type: 'geojson', data: layerUrl(base, info, version), attribution: ATTRIBUTION }
+}
+
+/** At most this many overlapping features are listed for one click. */
 export const POPUP_MAX_ITEMS = 8
 
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
 }
 
-function formatValue(key: string, value: unknown): string {
+/**
+ * Display labels for attribute names. The names come from UNOSAT's shapefiles, where the dbf format
+ * truncates them to 10 characters, so they are translated at display time rather than in the data.
+ * Unknown attribute names are shown as they are.
+ */
+const PROP_LABELS: Record<string, string> = {
+  // UNOSAT flood-extent fields, abbreviated to 10 characters by the shapefile dbf format.
+  Water_Clas: 'Water class',
+  Water_Stat: 'Water status',
+  Sensor_ID: 'Sensor',
+  Sensor_Dat: 'Imaged on',
+  SensorDate: 'Imaged on',
+  Confidence: 'Confidence',
+  Area_ha: 'Area (ha)',
+  EventCode: 'UNOSAT event',
+}
+
+function formatValue(value: unknown): string {
   if (value === null || value === undefined || value === '') return '—'
-  // inputpoint の浸水深は数値（m）。単位を補って浸水域側の表記と読み比べられるようにする。
-  if (key === '浸水深' && typeof value === 'number') return `${value} m`
   return String(value)
 }
 
 export function popupHtml(
   features: { layer: { id: string }; properties: Record<string, unknown> | null }[],
-  /** レイヤーID → 見出し（「地点名 / 推定浸水域」）。地点が複数あるときどれを指しているか分かるように。 */
+  /** Layer ID → heading ("location / layer"), so it is clear which location a feature belongs to. */
   headings: Map<string, string>,
 ): string {
   const items = features.slice(0, POPUP_MAX_ITEMS).map((f) => {
     const props = f.properties ?? {}
     const rows = Object.entries(props)
-      // gridcode は浸水深の区分番号そのもので、隣に出す浸水深の文字列と重複するため隠す
-      .filter(([k]) => k !== 'gridcode')
       .map(
         ([k, v]) =>
-          `<tr><th>${escapeHtml(k)}</th><td>${escapeHtml(formatValue(k, v))}</td></tr>`,
+          `<tr><th>${escapeHtml(PROP_LABELS[k] ?? k)}</th><td>${escapeHtml(formatValue(v))}</td></tr>`,
       )
       .join('')
     const head = headings.get(f.layer.id) ?? f.layer.id
-    return `<div class="pop-item"><p class="pop-item-head">${escapeHtml(head)}</p><table class="pop-tbl">${rows || '<tr><td>属性なし</td></tr>'}</table></div>`
+    return `<div class="pop-item"><p class="pop-item-head">${escapeHtml(head)}</p><table class="pop-tbl">${rows || '<tr><td>No attributes</td></tr>'}</table></div>`
   })
   const more =
     features.length > POPUP_MAX_ITEMS
-      ? `<p class="pop-item-head">ほか ${features.length - POPUP_MAX_ITEMS} 件</p>`
+      ? `<p class="pop-item-head">${features.length - POPUP_MAX_ITEMS} more</p>`
       : ''
-  return `<div class="pop-head">地物情報</div><div class="pop-body">${items.join('')}${more}</div>`
+  return `<div class="pop-head">Feature info</div><div class="pop-body">${items.join('')}${more}</div>`
 }

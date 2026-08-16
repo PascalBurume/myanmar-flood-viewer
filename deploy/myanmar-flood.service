@@ -1,0 +1,30 @@
+# The web server. Serves the built site and exposes /api/status, /api/run and /api/health.
+#
+# Deliberately separate from the update timer: the data must keep updating even with this stopped,
+# and this must keep serving the last good build even if the pipeline is failing.
+[Unit]
+Description=Myanmar flood viewer — web server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=flood
+WorkingDirectory=/srv/myanmar-flood
+Environment=PORT=5180
+Environment=HOST=127.0.0.1
+Environment=PUBLISH_DIR=/var/www/flood
+Environment=SITE_DIR=/var/www/flood
+ExecStart=/usr/bin/node server/index.mjs
+Restart=on-failure
+RestartSec=5
+
+# POST /api/run executes a pipeline, so the process is confined to what that actually needs.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/srv/myanmar-flood /var/www/flood
+
+[Install]
+WantedBy=multi-user.target

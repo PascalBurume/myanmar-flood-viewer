@@ -1,0 +1,25 @@
+# One pipeline run. Oneshot, triggered by the timer — nothing is long-lived here.
+[Unit]
+Description=Myanmar flood viewer — update the data
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=flood
+WorkingDirectory=/srv/myanmar-flood
+# The publish is an atomic directory swap, so a visitor never sees a half-copied site.
+ExecStart=/usr/bin/python3 scripts/run_pipeline.py --publish /var/www/flood
+# A run that fails still writes status.json saying so, and that file is the whole point — the site
+# has to be able to show "the check failed" rather than going quiet. So a non-zero exit is recorded
+# by systemd but never retried into a loop against someone else's API.
+TimeoutStartSec=900
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/srv/myanmar-flood /var/www/flood
+
+[Install]
+WantedBy=multi-user.target

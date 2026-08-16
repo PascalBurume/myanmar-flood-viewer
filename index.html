@@ -1,67 +1,14 @@
 <!doctype html>
-<html lang="ja">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
-  <title>千葉県大雨 推定浸水域ビューワ（2026/8/13）</title>
-  <meta name="description" content="2026年8月13日の千葉県大雨について、防災科研が公開した推定浸水域・浸水深を地図で閲覧するビューワ" />
+  <title>Myanmar Flood Viewer</title>
+  <meta name="description" content="A map viewer for satellite-detected flood extents and flood impact figures across Myanmar, from UNOSAT and WFP ADAM" />
   <meta name="theme-color" content="#2a78d6" />
 </head>
 <body>
-  <div id="map"></div>
-
-  <section id="panel" class="panel" aria-label="コントロールパネル">
-    <header class="panel-head">
-      <div class="brand">
-        <span class="brand-mark" aria-hidden="true">🌊</span>
-        <h1>千葉県大雨 推定浸水域</h1>
-      </div>
-      <div class="head-actions">
-        <button id="theme-btn" class="icon-btn" type="button" title="テーマ切替" aria-label="テーマ切替"></button>
-        <button id="collapse-btn" class="icon-btn" type="button" title="パネル開閉" aria-label="パネル開閉">▴</button>
-      </div>
-    </header>
-
-    <div id="panel-body" class="panel-body">
-      <p class="notice">
-        2026年8月13日の大雨による千葉県内の<strong>推定</strong>浸水域です。
-        SNS写真から読み取った浸水深をもとに防災科研が試算した速報値であり、
-        実際の浸水範囲・浸水深とは異なります。
-      </p>
-
-      <div class="field">
-        <div class="field-head">
-          <span class="field-label">浸水深</span>
-        </div>
-        <div id="legend" class="legend"></div>
-      </div>
-
-      <div class="field">
-        <div class="field-head">
-          <span class="field-label">レイヤー</span>
-        </div>
-        <div id="layers" class="toggles"></div>
-      </div>
-
-      <div class="field">
-        <div class="field-head">
-          <span class="field-label">対象地点</span>
-        </div>
-        <div id="datasets" class="toggles"></div>
-      </div>
-    </div>
-
-    <footer class="panel-foot">
-      <p class="disclaimer">本サイトは個人が作成・配信するものであり、防災科学技術研究所の公式サイトではありません。</p>
-      データ: <a href="https://mizu.bosai.go.jp/key/20260813" target="_blank" rel="noopener">防災科研 水・土砂防災研究部門「2026年8月13日の千葉県での大雨」</a><br />
-      背景: <a href="https://github.com/gsi-cyberjapan/optimal_bvmap" target="_blank" rel="noopener">国土地理院 最適化ベクトルタイル</a> / <a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">地理院タイル</a><br />
-      <span id="data-updated" class="build-ver"></span>
-      <span id="build-ver" class="build-ver"></span>
-    </footer>
-  </section>
-
-  <div id="basemap" class="basemap-switch" role="tablist" aria-label="背景地図"></div>
-
-  <script type="module" src="/src/main.ts"></script>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
 </body>
 </html>

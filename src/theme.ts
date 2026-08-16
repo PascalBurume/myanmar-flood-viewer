@@ -1,6 +1,6 @@
 export type Theme = 'light' | 'dark'
 
-const STORAGE_KEY = 'chiba-flood-viewer-theme'
+const STORAGE_KEY = 'myanmar-flood-viewer-theme'
 
 function systemPref(): Theme {
   return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
@@ -11,7 +11,7 @@ export function initialTheme(): Theme {
   return saved === 'light' || saved === 'dark' ? saved : systemPref()
 }
 
-/** <html data-theme="…"> を更新して現在テーマを保存する。 */
+/** Update <html data-theme="…"> and persist the current theme. */
 export function applyThemeAttr(theme: Theme): void {
   document.documentElement.dataset.theme = theme
   localStorage.setItem(STORAGE_KEY, theme)

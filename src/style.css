@@ -1,4 +1,4 @@
-/* ---- デザイントークン ---- */
+/* ---- Design tokens ---- */
 :root {
   --surface: rgba(255, 255, 255, 0.9);
   --surface-solid: #ffffff;
@@ -14,6 +14,26 @@
   --shadow: 0 10px 30px -10px rgba(16, 24, 40, 0.35), 0 2px 8px -4px rgba(16, 24, 40, 0.2);
   --radius: 16px;
   --radius-sm: 10px;
+
+  /* Card system. A severity tints the whole card rather than only a border, so it reads at a
+     glance without having to parse the text — but faintly, because six loud cards in a column
+     is just noise and the map has to stay the loudest thing on screen. */
+  --card-bg: rgba(255, 255, 255, 0.55);
+  --card-line: rgba(20, 22, 26, 0.1);
+  --card-shadow: 0 1px 2px rgba(16, 24, 40, 0.05), 0 4px 12px -6px rgba(16, 24, 40, 0.16);
+  --card-shadow-lift: 0 2px 4px rgba(16, 24, 40, 0.07), 0 10px 22px -10px rgba(16, 24, 40, 0.26);
+  --card-gloss: rgba(255, 255, 255, 0.75);
+
+  --critical: #c53030;
+  --critical-tint: rgba(197, 48, 48, 0.07);
+  --warning: #b7791f;
+  --warning-tint: rgba(183, 121, 31, 0.08);
+  /* Amber is bright enough to carry a rail or a badge but too light to read as small bold text on
+     a pale panel — #b7791f measures 3.64:1, under the 4.5:1 needed. Text gets its own darker ink;
+     in dark mode the same amber is already high-contrast, so the two collapse to one value there. */
+  --warning-ink: #8a5510;
+  --info: #2a78d6;
+  --info-tint: rgba(42, 120, 214, 0.06);
   color-scheme: light;
 }
 
@@ -30,6 +50,20 @@
   --track: rgba(255, 255, 255, 0.16);
   --hover: rgba(255, 255, 255, 0.07);
   --shadow: 0 12px 32px -10px rgba(0, 0, 0, 0.6), 0 2px 8px -4px rgba(0, 0, 0, 0.5);
+
+  --card-bg: rgba(255, 255, 255, 0.04);
+  --card-line: rgba(255, 255, 255, 0.09);
+  --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 12px -6px rgba(0, 0, 0, 0.45);
+  --card-shadow-lift: 0 2px 4px rgba(0, 0, 0, 0.4), 0 10px 22px -10px rgba(0, 0, 0, 0.6);
+  --card-gloss: rgba(255, 255, 255, 0.07);
+
+  --critical: #fc8181;
+  --critical-tint: rgba(252, 129, 129, 0.1);
+  --warning: #f0b429;
+  --warning-tint: rgba(240, 180, 41, 0.1);
+  --warning-ink: #f0b429;
+  --info: #4f97f0;
+  --info-tint: rgba(79, 151, 240, 0.09);
   color-scheme: dark;
 }
 
@@ -50,7 +84,7 @@ body {
   inset: 0;
 }
 
-/* ---- パネル ---- */
+/* ---- Panel ---- */
 .panel {
   position: absolute;
   top: 0;
@@ -60,14 +94,14 @@ body {
   width: 320px;
   display: flex;
   flex-direction: column;
-  /* backdrop-filter（すりガラス）は使わない。実GPUでの合成不具合により、
-     地図の再描画時にパネルが白く飛ぶ環境があるため。 */
+  /* No backdrop-filter (frosted glass): on some real GPUs a compositing bug blows the panel
+     out to white whenever the map redraws. */
   background: var(--surface);
   border-right: 1px solid var(--line);
   box-shadow: var(--shadow);
 }
 
-/* 畳んだらヘッダの高さだけに（全高固定を解除） */
+/* Collapsed, the panel is only as tall as its header (drop the full-height rule) */
 .panel.collapsed {
   bottom: auto;
   border-bottom: 1px solid var(--line);
@@ -141,7 +175,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  /* パネル内スクロールが地図のズーム/ページスクロールへ連鎖しないようにする */
+  /* Keep scrolling inside the panel from chaining into map zoom or page scroll */
   overscroll-behavior: contain;
 }
 
@@ -158,8 +192,8 @@ body {
 }
 
 .disclaimer {
-  /* 承認条件の備考: 静岡市の公式サイトと誤認されないよう明示する。
-     出典表記に埋もれないよう囲みを付ける。 */
+  /* Spell out that this is not an official humanitarian-agency site, so it cannot be mistaken for
+     one. Boxed so it does not get lost among the attribution lines. */
   margin: 0 0 8px;
   padding: 6px 8px;
   border: 1px solid var(--line-2);
@@ -175,7 +209,7 @@ body {
   opacity: 0.7;
 }
 
-/* ---- フィールド見出し / ミニボタン ---- */
+/* ---- Field headings / mini buttons ---- */
 .field-head {
   display: flex;
   align-items: center;
@@ -211,24 +245,57 @@ body {
   color: var(--ink);
 }
 
-/* ---- 注意書き（推定値であることの明示） ---- */
-.notice {
+/* ---- Notice (stating plainly that these are estimates) ---- */
+/* The shared card shape. An accent rail down the left edge fading as it descends, a faint tint of
+   the card's own colour, and a hairline gloss along the top so the surface reads as raised rather
+   than as a grey rectangle painted on. */
+.notice,
+.alert,
+.wx-caveat {
+  position: relative;
   margin: 0;
-  padding: 8px 10px;
-  border: 1px solid var(--line-2);
-  border-left: 3px solid var(--accent);
-  border-radius: var(--radius-sm);
-  background: var(--hover);
+  padding: 10px 12px 10px 14px;
+  border: 1px solid var(--card-line);
+  border-radius: 12px;
+  background:
+    linear-gradient(180deg, var(--card-gloss) 0%, transparent 42%),
+    var(--tint, var(--card-bg));
+  box-shadow: var(--card-shadow);
+  overflow: hidden;
+  /* `overflow: hidden` makes a flex item's implicit `min-height: auto` resolve to 0, so inside the
+     panel's flex column these cards would be squashed to a single clipped line. `flex: none` opts
+     them out of shrinking; the clip is only there to keep the rail inside the rounded corners. */
+  flex: none;
+}
+
+/* The rail, as a pseudo-element rather than a border, so it can carry a gradient and stop short of
+   the rounded corners instead of squaring them off. */
+.notice::before,
+.alert::before,
+.wx-caveat::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 3px;
+  background: linear-gradient(180deg, var(--rail, var(--accent)) 0%, transparent 130%);
+}
+
+.notice {
+  --tint: var(--info-tint);
+  --rail: var(--accent);
   font-size: 11.5px;
-  line-height: 1.7;
+  line-height: 1.65;
   color: var(--ink-2);
 }
 
 .notice strong {
+  font-weight: 650;
   color: var(--ink);
 }
 
-/* ---- 浸水深の凡例 ---- */
+/* ---- Inundation depth legend ---- */
 .legend {
   display: flex;
   flex-direction: column;
@@ -250,7 +317,7 @@ body {
   border-radius: 3px;
 }
 
-/* ---- レイヤートグル ---- */
+/* ---- Layer toggles ---- */
 .toggles {
   display: flex;
   flex-direction: column;
@@ -261,7 +328,7 @@ body {
   padding: 2px 0;
 }
 
-/* 地点の行はトグルと「移動」ボタンを横並びにする */
+/* On a location row, put the toggle and the Zoom button side by side */
 .ds-item {
   display: flex;
   align-items: center;
@@ -287,7 +354,7 @@ body {
   padding: 7px 8px;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  /* 中の checkbox（視覚非表示）を必ずこのラベル内に閉じ込める */
+  /* Keep the visually-hidden checkbox contained within this label */
   overflow: hidden;
 }
 
@@ -344,7 +411,7 @@ body {
   font-weight: 600;
 }
 
-/* ---- レイヤー説明の i ボタン / 説明文 ---- */
+/* ---- Layer description: the i button and the text ---- */
 .info-btn {
   flex: none;
   width: 16px;
@@ -374,7 +441,7 @@ body {
   color: var(--ink-2);
 }
 
-/* ---- 不透明度スライダー ---- */
+/* ---- Opacity slider ---- */
 .layer-opacity {
   display: flex;
   align-items: center;
@@ -397,17 +464,17 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* ---- 背景地図スイッチャー（右下） ---- */
+/* ---- Basemap switcher (bottom right) ---- */
 .basemap-switch {
   position: absolute;
   right: 10px;
-  /* 地図右下の帰属表示（compact）と重ならない高さに置く */
+  /* Sit high enough to clear the compact attribution control at the bottom right */
   bottom: 34px;
   z-index: 2;
   display: flex;
   overflow: hidden;
   border-radius: var(--radius-sm);
-  /* backdrop-filter は背景切替時のホバーで白化するため使わず、不透明背景にする */
+  /* backdrop-filter whitens on hover while the basemap swaps, so use an opaque background instead */
   background: var(--surface-solid);
   box-shadow: var(--shadow);
 }
@@ -437,7 +504,7 @@ body {
   color: var(--accent-ink);
 }
 
-/* ---- ポップアップ（MapLibre 上書き） ---- */
+/* ---- Popup (overriding MapLibre) ---- */
 .maplibregl-popup-content {
   padding: 0;
   border-radius: var(--radius-sm);
@@ -447,9 +514,10 @@ body {
   overflow: hidden;
 }
 
-/* tip は透明な太枠のうち「吹き出し本体と反対側の1辺」だけに色が付いて三角に見える。
-   全辺に色を付けると三角が潰れて四角になるため、MapLibre と同じくアンカー別に指定する。
-   MapLibre 側と同詳細度なので、後勝ちで !important なしに上書きできる。 */
+/* The tip is a thick transparent border where only the edge opposite the bubble is coloured, which
+   is what makes it read as a triangle. Colouring every edge collapses it into a square, so specify
+   it per anchor exactly as MapLibre does. Same specificity as MapLibre's rule, so it wins by order
+   without !important. */
 .maplibregl-popup-anchor-top .maplibregl-popup-tip,
 .maplibregl-popup-anchor-top-left .maplibregl-popup-tip,
 .maplibregl-popup-anchor-top-right .maplibregl-popup-tip {
@@ -488,7 +556,7 @@ body {
   font-weight: 700;
 }
 
-/* 重なっている地物をすべて並べるため、スクロールは本文側で受け持つ */
+/* All overlapping features are listed, so the body takes care of the scrolling */
 .pop-body {
   max-height: 280px;
   overflow-y: auto;
@@ -532,7 +600,7 @@ body {
   border-bottom: 0;
 }
 
-/* ---- MapLibre コントロールの馴染ませ ---- */
+/* ---- Blending in the MapLibre controls ---- */
 .maplibregl-ctrl-group {
   background: var(--surface-solid);
   box-shadow: var(--shadow);
@@ -542,8 +610,8 @@ body {
   border-top-color: var(--line);
 }
 
-/* MapLibre 標準の .maplibregl-ctrl-attrib.maplibregl-compact（背景 #fff / 文字 #000）は
-   詳細度が高くクラス1つでは上書きできない。同じ詳細度で当ててテーマ色を効かせる。 */
+/* MapLibre's own .maplibregl-ctrl-attrib.maplibregl-compact (#fff background / #000 text) is too
+   specific to override with a single class. Match its specificity so the theme colours apply. */
 .maplibregl-ctrl.maplibregl-ctrl-attrib,
 .maplibregl-ctrl-attrib.maplibregl-compact {
   background: var(--surface);
@@ -563,8 +631,8 @@ body {
   filter: invert(1);
 }
 
-/* 現在地ボタンは状態を色で示す（追跡中=青 #33b5e5 / エラー=赤 #e54e33）。
-   反転させると意味が逆の色になるため、状態アイコンだけ反転から除外する。 */
+/* The geolocate button signals state through colour (tracking = blue #33b5e5 / error = red #e54e33).
+   Inverting would flip those meanings, so the state icons are excluded from the inversion. */
 :root[data-theme='dark'] .maplibregl-ctrl-group button.maplibregl-ctrl-geolocate-active .maplibregl-ctrl-icon,
 :root[data-theme='dark'] .maplibregl-ctrl-group button.maplibregl-ctrl-geolocate-active-error .maplibregl-ctrl-icon,
 :root[data-theme='dark'] .maplibregl-ctrl-group button.maplibregl-ctrl-geolocate-background .maplibregl-ctrl-icon,
@@ -585,7 +653,7 @@ body {
   color: var(--ink-2);
 }
 
-/* ---- レスポンシブ（モバイルはボトムシート） ---- */
+/* ---- Responsive (bottom sheet on mobile) ---- */
 @media (max-width: 640px) {
   .panel {
     top: auto;
@@ -601,14 +669,14 @@ body {
   }
 
   .panel.collapsed {
-    /* デスクトップ用の .panel.collapsed { bottom:auto } を打ち消す */
+    /* Undo the desktop .panel.collapsed { bottom:auto } */
     bottom: 0;
     top: auto;
     border-bottom: 0;
     border-bottom-right-radius: 0;
   }
 
-  /* 畳んだパネルのヘッダ分だけ、地図コントロールを持ち上げる */
+  /* Lift the map controls by the height of the collapsed panel header */
   .maplibregl-ctrl-bottom-right,
   .maplibregl-ctrl-bottom-left {
     bottom: 56px;
@@ -618,7 +686,7 @@ body {
     bottom: 90px;
   }
 
-  /* タッチ操作しやすいよう当たり判定を拡大 */
+  /* Enlarge the hit area for touch */
   .icon-btn {
     width: 36px;
     height: 36px;
@@ -627,4 +695,1080 @@ body {
   .toggle {
     padding: 10px 8px;
   }
+}
+
+/* ---- Per-location statistics (bar list) ---- */
+.stats {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.stat-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+}
+
+.stat-clickable {
+  cursor: pointer;
+}
+
+.stat-clickable:hover {
+  background: var(--hover);
+}
+
+.stat-clickable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.stat-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.stat-name {
+  font-size: 12px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stat-value {
+  flex: none;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+}
+
+.stat-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--track);
+  overflow: hidden;
+}
+
+/* Bars are scaled against the largest value, not against 100 — see buildStats in src/main.ts. */
+.stat-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.stat-source {
+  margin: 2px 0 0;
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--ink-3);
+}
+
+/* ---- About dialog ---- */
+.about {
+  width: min(560px, calc(100vw - 32px));
+  max-height: min(80vh, 720px);
+  padding: 0;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+  background: var(--surface-solid);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+/* The dialog is painted by the browser above everything, so it needs its own backdrop colour
+   rather than relying on the panel's. */
+.about::backdrop {
+  background: rgba(10, 12, 16, 0.5);
+}
+
+.about-head {
+  position: sticky;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-solid);
+}
+
+.about-head h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.about-body {
+  padding: 14px;
+  overflow-y: auto;
+  max-height: calc(min(80vh, 720px) - 52px);
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--ink-2);
+  overscroll-behavior: contain;
+}
+
+.about-body h3 {
+  margin: 18px 0 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+.about-body p {
+  margin: 0 0 10px;
+}
+
+.about-body ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.about-body li {
+  margin-bottom: 5px;
+}
+
+.about-fit {
+  margin-bottom: 14px;
+}
+
+.about-item {
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+
+.about-item-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.about-item-name {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.about-chip {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--hover);
+  border: 1px solid var(--line-2);
+  font-size: 10.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.about-note {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+
+/* ---- Update pipeline: summary line, state chips, orchestration tree ---- */
+
+/* State colours as tokens so the dark block below can redefine them in one place, the same way
+   every other colour in this file works. */
+:root {
+  --state-ok: #2f855a;
+  --state-changed: #2a78d6;
+  --state-skipped: #8b919b;
+  --state-failed: #c53030;
+}
+
+:root[data-theme='dark'] {
+  --state-ok: #68d391;
+  --state-changed: #4f97f0;
+  --state-skipped: #8b919b;
+  --state-failed: #fc8181;
+}
+
+.pipeline-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pipeline-line {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--ink-2);
+}
+
+/* A check that could not complete must never read like a quiet success, so it gets the notice
+   treatment rather than sitting in the same grey as everything else. */
+.pipeline-warn {
+  margin: 2px 0 0;
+  padding: 5px 7px;
+  border-left: 3px solid var(--state-failed);
+  border-radius: var(--radius-sm);
+  background: var(--hover);
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--ink-2);
+}
+
+.pipeline-chip {
+  border-color: currentColor;
+}
+
+.pipeline-ok { color: var(--state-ok); }
+.pipeline-changed { color: var(--state-changed); }
+.pipeline-skipped { color: var(--state-skipped); }
+.pipeline-failed { color: var(--state-failed); }
+.pipeline-success { color: var(--state-ok); }
+.pipeline-failure { color: var(--state-failed); }
+
+.tree {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 6px;
+}
+
+.tree-node {
+  padding: 5px 0;
+  border-top: 1px solid var(--line);
+}
+
+.tree-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.tree-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.tree-detail {
+  margin: 2px 0 0;
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--ink-3);
+}
+
+.pipeline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+/* The trigger is an <a> styled as a button, so it needs the text-decoration reset .mini-btn
+   never needed before. */
+.pipeline-actions a.mini-btn {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Shown instead of a trigger button on a self-hosted deployment, where there is no backend to
+   accept one. */
+.pipeline-cmd {
+  display: block;
+  margin: 6px 0;
+  padding: 6px 8px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-sm);
+  background: var(--hover);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10.5px;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+/* Live output from a pipeline run, streamed by the local server. */
+.run-log {
+  margin: 0 0 10px;
+  padding: 8px;
+  max-height: 190px;
+  overflow: auto;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-sm);
+  background: var(--hover);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10.5px;
+  line-height: 1.5;
+  white-space: pre;
+}
+
+/* A figure whose provenance is not established, marked inline rather than footnoted. Sitting
+   beside sourced numbers, an unsourced one reads as equally sourced unless something says so. */
+.stat-unverified {
+  flex: none;
+  margin-left: auto;
+  padding: 0 5px;
+  border: 1px solid var(--state-failed);
+  border-radius: 999px;
+  color: var(--state-failed);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+/* ---- National summary band ---- */
+.summary-band {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--line);
+}
+
+.summary-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 8px 10px;
+  background: var(--surface-solid);
+}
+
+.summary-value {
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+  color: var(--ink);
+}
+
+.summary-label {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+/* ---- Worst affected ---- */
+.top-affected {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.top-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
+/* Segmented control for the measure. One border around the group, dividers between. */
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.seg-btn {
+  padding: 3px 9px;
+  border: 0;
+  border-right: 1px solid var(--line-2);
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+.seg-btn:last-child { border-right: 0; }
+.seg-btn:hover { background: var(--hover); }
+
+.seg-btn.is-on {
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 700;
+}
+
+.rank {
+  display: inline-block;
+  min-width: 15px;
+  margin-right: 5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
+  font-weight: 700;
+}
+
+.rank-sub {
+  margin-left: 6px;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--ink-3);
+}
+
+/* ---- NASA imagery date stepper ----
+   Sits above the basemap switch, only while a dated imagery basemap is active. */
+.imagery-date {
+  position: absolute;
+  right: 12px;
+  bottom: 52px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  background: var(--surface-solid);
+  box-shadow: var(--shadow);
+}
+
+.imagery-date .icon-btn {
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 999px;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.imagery-date .icon-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.imagery-date input[type='date'] {
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  padding: 0 2px;
+}
+
+@media (max-width: 640px) {
+  .imagery-date { bottom: 128px; }
+}
+
+.imagery-date .clear-day {
+  margin-left: 2px;
+  white-space: nowrap;
+}
+
+/* Result of the clear-day search, above the control it belongs to. */
+.imagery-note {
+  position: absolute;
+  right: 12px;
+  bottom: 86px;
+  z-index: 2;
+  max-width: 290px;
+  padding: 6px 9px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-sm);
+  background: var(--surface-solid);
+  box-shadow: var(--shadow);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+
+@media (max-width: 640px) {
+  .imagery-note { bottom: 162px; }
+}
+
+/* ---- Trend ---- */
+.trend { display: flex; flex-direction: column; gap: 8px; }
+
+/* Bars, not a line: these are discrete satellite passes days apart, and joining them with a line
+   would imply values we never observed in between. */
+.trend-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  height: 74px;
+  padding: 5px 6px;
+  border: 1px solid var(--card-line);
+  border-radius: 12px;
+  background:
+    linear-gradient(180deg, var(--card-gloss) 0%, transparent 50%),
+    var(--card-bg);
+  box-shadow: inset 0 1px 2px rgba(16, 24, 40, 0.04);
+  overflow-x: auto;
+}
+
+.trend-bar {
+  flex: 1 0 3px;
+  min-width: 3px;
+  border-radius: 1px 1px 0 0;
+  background: var(--accent);
+  opacity: 0.75;
+}
+
+.trend-bar:hover { opacity: 1; }
+
+.trend-bar.is-latest {
+  background: #e8703a;
+  opacity: 1;
+}
+
+/* Population withheld: drawn hollow at full height so the gap in the record is visible rather
+   than looking like a day with no flooding. */
+.trend-bar.is-withheld {
+  background: repeating-linear-gradient(
+    45deg, transparent, transparent 2px, var(--line-2) 2px, var(--line-2) 4px
+  );
+  opacity: 0.6;
+}
+
+.trend-facts {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.trend-facts > div { display: flex; flex-direction: column; gap: 1px; }
+
+.trend-value {
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.trend-value.up { color: var(--state-failed); }
+.trend-value.down { color: var(--state-ok); }
+
+.trend-label {
+  font-size: 9.5px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+/* ---- Alerts ---- */
+.alerts { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+
+.alerts-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 1px;
+}
+
+.alert-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+/* A live dot, so a critical count is visible before the words are read. The pulse is slow and
+   low-contrast: this is a standing condition, not an incoming notification demanding a click. */
+.alert-count.is-critical { color: var(--critical); }
+
+.alert-count.is-critical::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--critical);
+  box-shadow: 0 0 0 0 var(--critical);
+  animation: alert-pulse 2.8s ease-out infinite;
+}
+
+@keyframes alert-pulse {
+  0% { box-shadow: 0 0 0 0 var(--critical); opacity: 1; }
+  70% { box-shadow: 0 0 0 5px transparent; opacity: 0.75; }
+  100% { box-shadow: 0 0 0 0 transparent; opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .alert-count.is-critical::before { animation: none; }
+}
+
+.alert {
+  display: flex;
+  gap: 9px;
+  transition: box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.alert:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--card-shadow-lift);
+}
+
+.alert-critical { --tint: var(--critical-tint); --rail: var(--critical); }
+.alert-warning { --tint: var(--warning-tint); --rail: var(--warning); }
+.alert-info { --tint: var(--info-tint); --rail: var(--info); }
+
+.alert-icon {
+  flex: none;
+  width: 17px;
+  height: 17px;
+  margin-top: 1px;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 17px;
+  text-align: center;
+  color: #fff;
+  /* The halo separates the badge from a tinted card of the same hue, which a flat disc does not. */
+  box-shadow: 0 0 0 3px var(--tint), 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
+.alert-critical .alert-icon { background: var(--critical); }
+.alert-warning .alert-icon {
+  /* The rail can be the bright amber; a white glyph on it measures only 3.64:1, so the badge takes
+     the darker ink instead. Same hue, readable mark. */
+  background: var(--warning-ink);
+}
+.alert-info .alert-icon { background: var(--info); }
+
+/* Dark mode uses light severity colours, so white text on them is unreadable — flip to dark ink. */
+:root[data-theme='dark'] .alert-icon { color: rgba(12, 14, 18, 0.92); }
+
+.alert-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+
+.alert-title {
+  font-size: 11.5px;
+  font-weight: 650;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.alert-detail {
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+
+/* Figures inside an alert line up and read as measurements rather than prose. */
+.alert-detail { font-variant-numeric: tabular-nums; }
+
+/* ---- Trend readout ---- */
+.trend-bar { cursor: crosshair; transition: opacity 0.08s; }
+
+.trend-bar.is-hover {
+  opacity: 1;
+  outline: 1px solid var(--ink-2);
+  outline-offset: 0;
+}
+
+.trend-readout {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--card-line);
+  border-radius: 12px;
+  background:
+    linear-gradient(180deg, var(--card-gloss) 0%, transparent 42%),
+    var(--card-bg);
+  box-shadow: var(--card-shadow);
+}
+
+.readout-date {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 3px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--line-2);
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.readout-service {
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--ink-3);
+}
+
+.readout-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 10.5px;
+  color: var(--ink-2);
+}
+
+/* The measure the bars are currently drawn from, so the reader can see which number the chart
+   height corresponds to and which three are context. */
+.readout-row.is-metric { color: var(--ink); font-weight: 600; }
+
+.readout-value { font-variant-numeric: tabular-nums; }
+
+.readout-value.is-withheld {
+  font-style: italic;
+  color: var(--ink-3);
+}
+
+.readout-note {
+  margin: 4px 0 0;
+  font-size: 9.5px;
+  line-height: 1.45;
+  color: var(--ink-3);
+}
+
+.trend-hint {
+  margin: 0;
+  font-size: 9.5px;
+  text-align: center;
+  color: var(--ink-3);
+}
+
+/* ---- Weather ---- */
+.weather { display: flex; flex-direction: column; gap: 9px; }
+
+/* Said once at the top of the section, not per row: everything below is a model output about the
+   future, and every other number in this viewer is an observation of the past. */
+.wx-caveat {
+  --tint: var(--warning-tint);
+  --rail: var(--warning);
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+
+.wx-caveat strong {
+  font-weight: 700;
+  color: var(--warning-ink);
+}
+
+.wx-row { display: flex; flex-direction: column; gap: 3px; }
+
+.wx-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.wx-name {
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--ink);
+}
+
+.wx-value {
+  flex: none;
+  font-size: 11.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.wx-unit { font-size: 9px; font-weight: 500; color: var(--ink-3); }
+
+.wx-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  height: 30px;
+  padding: 3px 4px;
+  border: 1px solid var(--card-line);
+  border-radius: 9px;
+  background:
+    linear-gradient(180deg, var(--card-gloss) 0%, transparent 55%),
+    var(--card-bg);
+}
+
+.wx-bar,
+.wx-q {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 2px;
+  border-radius: 1px 1px 0 0;
+  background: var(--accent);
+  opacity: 0.8;
+}
+
+.wx-bar:hover,
+.wx-q:hover { opacity: 1; }
+
+/* Forecast bars are hollow: a solid bar for a modelled day would look exactly like a measured one. */
+.wx-bar.is-forecast,
+.wx-q.is-forecast {
+  background: repeating-linear-gradient(
+    45deg, transparent, transparent 2px, var(--accent) 2px, var(--accent) 3px
+  );
+  opacity: 0.85;
+}
+
+/* Today: where measurement stops and modelling starts. */
+.wx-bar.is-today { box-shadow: -1px 0 0 0 var(--ink-2); }
+
+.wx-bars.is-river .wx-q { min-width: 1px; border-radius: 0; }
+
+/* The ensemble envelope, sitting above the forecast value — GloFAS's own spread widens from about
+   ±1% tomorrow to −11%/+38% two weeks out, and a single line would hide that entirely. */
+.wx-band {
+  position: absolute;
+  right: 0;
+  bottom: 100%;
+  left: 0;
+  background: var(--accent);
+  opacity: 0.22;
+}
+
+.wx-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 9px;
+  color: var(--ink-3);
+}
+
+.wx-forecast-total { font-weight: 600; color: var(--ink-2); }
+.wx-rising { font-weight: 700; color: var(--state-failed); }
+.wx-steady { color: var(--ink-3); }
+
+.wx-warn {
+  margin: 2px 0 0;
+  font-size: 9.5px;
+  line-height: 1.4;
+  color: var(--state-failed);
+}
+
+.rain-control { display: flex; flex-direction: column; gap: 7px; }
+
+/* The product's own ramp, sampled from NASA's colour map so the key matches the pixels. */
+.rain-scale {
+  display: flex;
+  align-items: flex-end;
+  gap: 0;
+}
+
+.rain-stop {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rain-stop span {
+  display: block;
+  height: 8px;
+}
+
+.rain-stop:first-child span { border-radius: 2px 0 0 2px; }
+
+.rain-stop em {
+  font-size: 8px;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+  color: var(--ink-3);
+}
+
+.rain-scale-unit {
+  flex: none;
+  padding-left: 4px;
+  font-size: 8px;
+  color: var(--ink-3);
+}
+
+/* ---- Pipeline stepper (horizontal) ---- */
+.stepper { display: flex; flex-direction: column; gap: 10px; }
+
+.stepper-track {
+  display: flex;
+  align-items: flex-start;
+  padding: 4px 2px 2px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.step {
+  display: flex;
+  align-items: flex-start;
+  flex: 1 1 0;
+  min-width: 74px;
+}
+
+/* The connector reports the state of the step to its LEFT, so the filled run of the line is
+   exactly the work already finished rather than the work merely reached. */
+.step-line {
+  flex: 1 1 auto;
+  height: 2px;
+  min-width: 10px;
+  margin-top: 12px;
+  border-radius: 2px;
+  background: var(--track);
+}
+
+.step-line.is-ok,
+.step-line.is-changed { background: var(--state-ok); }
+.step-line.is-skipped { background: var(--track); }
+.step-line.is-failed { background: var(--state-failed); }
+.step-line.is-running { background: linear-gradient(90deg, var(--state-ok), var(--accent)); }
+
+.step-btn {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 74px;
+  padding: 0 2px;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.step-node {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 2px solid var(--track);
+  border-radius: 50%;
+  background: var(--surface-solid);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-3);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.step-label {
+  font-size: 9px;
+  line-height: 1.25;
+  text-align: center;
+  color: var(--ink-3);
+}
+
+.step.is-ok .step-node,
+.step.is-changed .step-node {
+  border-color: var(--state-ok);
+  background: var(--state-ok);
+  color: #fff;
+}
+
+.step.is-failed .step-node {
+  border-color: var(--state-failed);
+  background: var(--state-failed);
+  color: #fff;
+}
+
+.step.is-skipped .step-node {
+  border-style: dashed;
+  color: var(--ink-3);
+}
+
+/* The step being worked on right now: a filled ring with a halo that breathes. */
+.step.is-running .step-node {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+  animation: step-working 1.4s ease-in-out infinite;
+}
+
+.step.is-running .step-label { font-weight: 700; color: var(--ink); }
+
+@keyframes step-working {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(42, 120, 214, 0.45); }
+  50% { box-shadow: 0 0 0 6px rgba(42, 120, 214, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .step.is-running .step-node { animation: none; box-shadow: 0 0 0 4px var(--info-tint); }
+}
+
+.step.is-shown .step-node { transform: scale(1.12); }
+.step.is-shown .step-label { color: var(--ink); }
+.step-btn:hover .step-node { transform: scale(1.12); }
+
+.stepper-foot {
+  display: flex;
+  justify-content: space-between;
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+/* The selected step's detail, below the track rather than in a tooltip: these details are whole
+   sentences (a skipped stage explains why), and a tooltip cannot be read and compared. */
+.step-detail {
+  --tint: var(--card-bg);
+  --rail: var(--track);
+  position: relative;
+  padding: 9px 11px 9px 13px;
+  border: 1px solid var(--card-line);
+  border-radius: 12px;
+  background:
+    linear-gradient(180deg, var(--card-gloss) 0%, transparent 42%),
+    var(--tint);
+  box-shadow: var(--card-shadow);
+  overflow: hidden;
+}
+
+.step-detail::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 3px;
+  background: linear-gradient(180deg, var(--rail) 0%, transparent 130%);
+}
+
+.step-detail.is-ok,
+.step-detail.is-changed { --rail: var(--state-ok); }
+.step-detail.is-running { --rail: var(--accent); --tint: var(--info-tint); }
+.step-detail.is-failed { --rail: var(--critical); --tint: var(--critical-tint); }
+
+.step-detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.step-detail-name {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--ink);
+}
+
+.step-detail-body {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+
+.step-detail-time {
+  display: block;
+  margin-top: 5px;
+  font-size: 9.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
 }
