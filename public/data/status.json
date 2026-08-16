@@ -1,11 +1,11 @@
 {
   "schema": 1,
-  "generatedAt": "2026-08-16T06:11:27+00:00",
+  "generatedAt": "2026-08-16T06:57:10+00:00",
   "run": {
     "trigger": "manual",
     "runner": "USERnoMacBook-Air.local",
-    "startedAt": "2026-08-16T06:10:49+00:00",
-    "seconds": 38.34,
+    "startedAt": "2026-08-16T06:56:30+00:00",
+    "seconds": 39.36,
     "conclusion": "ok",
     "stages": [
       {
@@ -13,7 +13,7 @@
         "label": "Scan window (until 2026-09-14)",
         "state": "ok",
         "detail": "today 2026-08-16 is within the window",
-        "startedAt": "2026-08-16T06:10:49+00:00",
+        "startedAt": "2026-08-16T06:56:30+00:00",
         "seconds": 0.0
       },
       {
@@ -21,7 +21,7 @@
         "label": "UNOSAT — flood extents, Myanmar",
         "state": "skipped",
         "detail": "hand-traced extents are not polled: products are 8-282 MB and the clipping is hand-tuned. The FloodAI stage covers the same source automatically.",
-        "startedAt": "2026-08-16T06:10:49+00:00",
+        "startedAt": "2026-08-16T06:56:30+00:00",
         "seconds": 0.0
       },
       {
@@ -29,40 +29,48 @@
         "label": "UNOSAT FloodAI — nationwide exposure",
         "state": "ok",
         "detail": "AI20260814MMR",
-        "startedAt": "2026-08-16T06:10:49+00:00",
-        "seconds": 1.33
+        "startedAt": "2026-08-16T06:56:30+00:00",
+        "seconds": 1.3
       },
       {
         "key": "adam",
         "label": "WFP ADAM — flood impact, Myanmar",
         "state": "ok",
         "detail": "FL-20260806-MMR-00 (effective 2026-08-06)",
-        "startedAt": "2026-08-16T06:10:50+00:00",
-        "seconds": 2.21
+        "startedAt": "2026-08-16T06:56:32+00:00",
+        "seconds": 1.91
       },
       {
         "key": "history",
         "label": "Flood history — multi-year series",
         "state": "ok",
         "detail": "142 observations, 2022-03-19 … 2026-08-08 (18.1 KB)",
-        "startedAt": "2026-08-16T06:10:53+00:00",
-        "seconds": 11.47
+        "startedAt": "2026-08-16T06:56:34+00:00",
+        "seconds": 10.32
       },
       {
         "key": "weather",
         "label": "Rainfall and river forecast",
         "state": "ok",
         "detail": "7 rain points, 8 river gauges (25.7 KB)",
-        "startedAt": "2026-08-16T06:11:04+00:00",
-        "seconds": 23.33
+        "startedAt": "2026-08-16T06:56:44+00:00",
+        "seconds": 23.48
+      },
+      {
+        "key": "publish",
+        "label": "Build and publish to /Users/user/.local/share/myanmar-flood-viewer/site",
+        "state": "ok",
+        "detail": "published 7.1 MB to /Users/user/.local/share/myanmar-flood-viewer/site",
+        "startedAt": "2026-08-16T06:57:08+00:00",
+        "seconds": 2.35
       },
       {
         "key": "status",
         "label": "Write the pipeline status",
         "state": "ok",
         "detail": "conclusion ok",
-        "startedAt": "2026-08-16T06:11:27+00:00",
-        "seconds": 0.0
+        "startedAt": "2026-08-16T06:57:08+00:00",
+        "seconds": 2.35
       }
     ]
   },
@@ -71,7 +79,7 @@
     "floodai": {
       "label": "UNOSAT FloodAI — nationwide exposure",
       "state": "ok",
-      "checkedAt": "2026-08-16T06:10:49+00:00",
+      "checkedAt": "2026-08-16T06:56:31+00:00",
       "sourceUrl": "https://unosat-rm.cern.ch/FloodAI/apps/MMR/",
       "probe": "newest AI<date>MMR service",
       "detail": "AI20260814MMR — 616,059 people across 207 townships",
@@ -92,7 +100,7 @@
     "adam": {
       "label": "WFP ADAM — flood impact, Myanmar",
       "state": "ok",
-      "checkedAt": "2026-08-16T06:10:50+00:00",
+      "checkedAt": "2026-08-16T06:56:32+00:00",
       "sourceUrl": "https://api.adam.geospatial.wfp.org",
       "probe": "newest Myanmar event id",
       "detail": "FL-20260806-MMR-00",
@@ -143,9 +151,9 @@
     ]
   },
   "previous": {
-    "generatedAt": "2026-08-16T06:07:52+00:00",
+    "generatedAt": "2026-08-16T06:56:12+00:00",
     "run": {
-      "conclusion": "failed"
+      "conclusion": "ok"
     },
     "indexUpdated": "2026-08-16T01:04:14+00:00",
     "datasets": {},

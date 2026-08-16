@@ -288,7 +288,9 @@ saying otherwise is exactly the claim this project exists not to make.
 the pipeline behind the server dies. **200** when the last run is recent and clean, **503** with a
 `faults` array when it is not. That 503 is the one signal worth wiring to an external monitor,
 because the site can be perfectly healthy and completely out of date, and only the age of the run
-says so. Sample systemd units and a cron line are in [`deploy/`](deploy/).
+says so. Running it unattended is in [`deploy/`](deploy/): systemd units for a Linux server, and
+`deploy/launchd/install.sh` for macOS, which has no systemd. Both keep the update job separate from
+the web server, so a crashed server never silently stops the data updating.
 
 ### Weather
 

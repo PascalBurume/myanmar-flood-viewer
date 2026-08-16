@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  One pipeline run, twice a day. The *timer* keeps the data current, not the server — coupling them
+  would mean a crashed web server silently stops the data updating too.
+
+  A failed run still writes status.json saying so, and that file is the whole point: the site has to
+  be able to show "the check failed" rather than going quiet. So a non-zero exit is left alone here
+  rather than retried in a loop against someone else's API.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>local.myanmar-flood.update</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>__PYTHON__</string>
+    <string>__REPO__/scripts/run_pipeline.py</string>
+    <string>--publish</string>
+    <string>__SITE__</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>__REPO__</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>__PATH__</string>
+  </dict>
+
+  <!-- Twice daily. Sentinel-1 revisit is days, so this is not chasing the satellite; it is making
+       sure a new product is picked up within hours of publication rather than whenever someone
+       looks. launchd runs a missed calendar job once on wake, which is the behaviour wanted on a
+       laptop that sleeps overnight. -->
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict><key>Hour</key><integer>1</integer><key>Minute</key><integer>17</integer></dict>
+    <dict><key>Hour</key><integer>13</integer><key>Minute</key><integer>17</integer></dict>
+  </array>
+
+  <!-- Not on load: installing the agent should not kick off a network run at that moment. -->
+  <key>RunAtLoad</key><false/>
+
+  <key>StandardOutPath</key>
+  <string>__LOGS__/update.log</string>
+  <key>StandardErrorPath</key>
+  <string>__LOGS__/update.log</string>
+</dict>
+</plist>

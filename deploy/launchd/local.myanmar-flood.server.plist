@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The web server. Serves the published site and exposes /api/status, /api/run and /api/health.
+
+  Deliberately separate from the updater below: the data must keep updating with this stopped, and
+  this must keep serving the last good build even while the pipeline is failing.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>local.myanmar-flood.server</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>__NODE__</string>
+    <string>__REPO__/server/index.mjs</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>__REPO__</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PORT</key><string>5180</string>
+    <!-- Binds to localhost only. POST /api/run executes a pipeline, and there is no auth. -->
+    <key>HOST</key><string>127.0.0.1</string>
+    <key>SITE_DIR</key><string>__SITE__</string>
+    <key>PUBLISH_DIR</key><string>__SITE__</string>
+    <key>PATH</key><string>__PATH__</string>
+  </dict>
+
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+
+  <key>StandardOutPath</key>
+  <string>__LOGS__/server.log</string>
+  <key>StandardErrorPath</key>
+  <string>__LOGS__/server.log</string>
+</dict>
+</plist>
