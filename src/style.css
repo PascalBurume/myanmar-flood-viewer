@@ -12,6 +12,11 @@
   --track: rgba(20, 22, 26, 0.14);
   --hover: rgba(20, 22, 26, 0.05);
   --shadow: 0 10px 30px -10px rgba(16, 24, 40, 0.35), 0 2px 8px -4px rgba(16, 24, 40, 0.2);
+  /* The panel is a reading surface now, not just a legend: it carries an assistant with prose,
+     ranked bar charts and a composer. At 320px a chart row like "Bago (East) 14 townships 52,226"
+     had no room to breathe. Widened, but still a minority of the screen — the map stays the
+     loudest thing, which is the whole point of the layout. */
+  --panel-w: 384px;
   --radius: 16px;
   --radius-sm: 10px;
 
@@ -91,7 +96,7 @@ body {
   bottom: 0;
   left: 0;
   z-index: 2;
-  width: 320px;
+  width: var(--panel-w);
   display: flex;
   flex-direction: column;
   /* No backdrop-filter (frosted glass): on some real GPUs a compositing bug blows the panel
@@ -109,6 +114,8 @@ body {
 }
 
 .panel.collapsed .panel-body,
+.panel.collapsed .panel-tabs,
+.panel.collapsed .panel-pane,
 .panel.collapsed .panel-foot {
   display: none;
 }
@@ -251,7 +258,11 @@ body {
    than as a grey rectangle painted on. */
 .notice,
 .alert,
-.wx-caveat {
+.wx-caveat,
+.chat-note,
+.chat-error,
+.chat-chart,
+.chat-confirm {
   position: relative;
   margin: 0;
   padding: 10px 12px 10px 14px;
@@ -271,6 +282,10 @@ body {
 /* The rail, as a pseudo-element rather than a border, so it can carry a gradient and stop short of
    the rounded corners instead of squaring them off. */
 .notice::before,
+.chat-note::before,
+.chat-error::before,
+.chat-chart::before,
+.chat-confirm::before,
 .alert::before,
 .wx-caveat::before {
   content: '';
@@ -651,6 +666,13 @@ body {
   background: var(--surface);
   border-color: var(--line-2);
   color: var(--ink-2);
+}
+
+/* Wide screens can spare it; the map is still far the larger half. */
+@media (min-width: 1500px) {
+  :root {
+    --panel-w: 440px;
+  }
 }
 
 /* ---- Responsive (bottom sheet on mobile) ---- */
@@ -1034,6 +1056,12 @@ body {
   border-radius: var(--radius-sm);
   overflow: hidden;
   background: var(--line);
+  /* `flex: none` is load-bearing, exactly as it is on the .notice/.alert cards. `overflow: hidden`
+     is here to keep the cell backgrounds inside the rounded corners, but it also makes this flex
+     item's implicit `min-height: auto` resolve to 0 — so as soon as the panel had enough content to
+     want to shrink something, the whole band collapsed to its 2px of border and vanished. It had
+     been one added line away from this the whole time. */
+  flex: none;
 }
 
 .summary-cell {
@@ -1772,3 +1800,390 @@ body {
   font-variant-numeric: tabular-nums;
   color: var(--ink-3);
 }
+
+
+/* ---- the assistant ------------------------------------------------------------------------ */
+
+/* `hidden` sets display:none from the UA stylesheet, which ANY author `display` rule beats — and
+   both panes set `display: flex`. Without this the inactive tab's pane stays on screen underneath
+   the active one. */
+.panel-body[hidden],
+.panel-pane[hidden] {
+  display: none;
+}
+
+.panel-tabs {
+  display: flex;
+  flex: none;
+  gap: 2px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.panel-tabs button {
+  flex: 1;
+  padding: 9px 8px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  background: transparent;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.panel-tabs button:hover { color: var(--ink-2); background: var(--hover); }
+
+.panel-tabs button[aria-selected='true'] {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+/* The pane is the flex child that takes the remaining height. `min-height: 0` is load-bearing:
+   without it the implicit `min-height: auto` stops .chat-log from ever scrolling and the composer
+   is pushed off the bottom of the panel. Same trap the cards hit with `flex: none`. */
+.panel-pane {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* The only scroller in this pane — mirrors .panel-body, so scrolling a long answer cannot chain
+   into map zoom.
+
+   Unlike the rest of the panel this gets an opaque background. The panel surface is deliberately
+   translucent, which is fine behind dense short labels but not behind a chat: an answer is long-form
+   text people actually read, most of the pane is empty most of the time, and place names sliding
+   about underneath a paragraph make it markedly harder to read. The panel keeps its translucency;
+   the reading surface does not. */
+.chat-log {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--surface-solid);
+}
+
+.chat-note { --tint: var(--info-tint); --rail: var(--accent); margin: 12px; font-size: 11.5px; line-height: 1.65; color: var(--ink-2); }
+.chat-note code { font-size: 10.5px; background: var(--hover); padding: 1px 4px; border-radius: 4px; }
+
+.chat-intro { flex: none; margin: 0; font-size: 10.5px; line-height: 1.6; color: var(--ink-3); }
+
+.chat-msg { flex: none; font-size: 12px; line-height: 1.6; }
+.chat-msg p { margin: 0 0 6px; }
+.chat-msg p:last-child { margin-bottom: 0; }
+
+.chat-msg.is-you {
+  align-self: flex-end;
+  max-width: 88%;
+  padding: 7px 10px;
+  border-radius: 12px 12px 4px 12px;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.chat-msg.is-assistant { color: var(--ink); }
+
+/* What the assistant consulted, shown rather than described, so a reader can see that a figure came
+   from a dataset lookup and not from the model's memory. */
+.chat-tools { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+
+.chat-chip {
+  padding: 2px 7px;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  background: var(--hover);
+  color: var(--ink-3);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.chat-chip.is-error { border-color: var(--critical); color: var(--critical); }
+
+.chat-error { --tint: var(--critical-tint); --rail: var(--critical); font-size: 11.5px; color: var(--ink-2); }
+
+.chat-thinking { color: var(--ink-3); font-style: italic; }
+
+.chat-suggest { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+
+.chat-composer {
+  flex: none;
+  display: flex;
+  gap: 6px;
+  align-items: flex-end;
+  padding: 10px 12px;
+  border-top: 1px solid var(--line);
+}
+
+.chat-composer textarea {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  padding: 7px 9px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-sm);
+  background: var(--surface-solid);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.chat-composer textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+.chat-foot {
+  flex: none;
+  margin: 0;
+  padding: 0 12px 10px;
+  font-size: 10px;
+  color: var(--ink-3);
+}
+
+@media (max-width: 640px) {
+  /* In the bottom sheet the log is the only thing that scrolls, so the composer stays reachable. */
+  .chat-log { padding: 10px; }
+  .chat-composer { padding: 8px 10px; }
+}
+
+
+/* ---- charts and the confirm card in the conversation --------------------------------------- */
+
+.chat-chart {
+  --tint: var(--card-bg);
+  --rail: var(--track);
+  margin-top: 8px;
+  padding: 9px 10px 8px 12px;
+}
+
+.chat-chart figcaption {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin-bottom: 7px;
+}
+
+.chat-bars { display: flex; flex-direction: column; gap: 6px; }
+
+.chat-bars .stat-row.is-clickable { cursor: pointer; }
+.chat-bars .stat-row.is-clickable:hover .stat-name { color: var(--accent); }
+.chat-bars .stat-sub { color: var(--ink-3); font-weight: 400; }
+
+/* A withheld value is drawn hollow at full width, never as a short bar — a missing figure must not
+   look like a small one. Same reasoning as .trend-bar.is-withheld. */
+.chat-bars .stat-fill.is-withheld {
+  background: repeating-linear-gradient(
+    45deg,
+    transparent, transparent 3px,
+    var(--line-2) 3px, var(--line-2) 5px
+  ) !important;
+}
+
+.chat-series {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 64px;
+  padding-top: 2px;
+}
+
+.chat-series .trend-bar { flex: 1; min-width: 2px; border-radius: 1px 1px 0 0; }
+
+.chat-chart-caveat {
+  margin: 7px 0 0;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+
+.chat-chart-source {
+  margin: 5px 0 0;
+  font-size: 9.5px;
+  line-height: 1.4;
+  color: var(--ink-3);
+}
+
+/* The reader's decision, never the model's. Warning-tinted because it costs time and live API
+   calls — not critical, but not something to click by reflex either. */
+.chat-confirm {
+  --tint: var(--warning-tint);
+  --rail: var(--warning);
+  margin-top: 8px;
+  padding: 9px 10px 9px 12px;
+}
+
+.chat-confirm p { margin: 0 0 7px; font-size: 11.5px; line-height: 1.55; color: var(--ink-2); }
+.chat-confirm-note { display: block; margin-top: 5px; font-size: 9.5px; color: var(--ink-3); }
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-log { scroll-behavior: auto; }
+}
+
+
+/* ---- assistant: prose, retry, reset ---------------------------------------------------------- */
+
+/* Markdown output. The model writes lists and bold whether or not it is asked to. */
+.chat-msg ul,
+.chat-msg ol {
+  margin: 0 0 6px;
+  padding-left: 18px;
+}
+
+.chat-msg li { margin-bottom: 3px; }
+.chat-msg li:last-child { margin-bottom: 0; }
+.chat-msg strong { font-weight: 700; }
+
+.chat-msg code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--hover);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+}
+
+.chat-msg.is-you code { background: rgba(255, 255, 255, 0.22); }
+
+/* Offered on a failed turn, because the usual cause is transient — a timeout, a rate limit, a
+   dropped connection — and retyping the question to find out is a poor use of anyone's time. */
+.chat-retry {
+  display: block;
+  margin-top: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--critical);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* Every turn re-sends the whole conversation, so a stale thread is a standing cost, not just
+   clutter. Starting fresh should be one click. */
+.chat-reset {
+  float: right;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.chat-reset:hover { text-decoration: underline; }
+.chat-reset:disabled { color: var(--ink-3); cursor: default; text-decoration: none; }
+
+
+/* ---- asking about a spot on the map ---------------------------------------------------------- */
+
+/* Sits directly above the composer so it is in view while the question is being typed — a location
+   silently attached to a question would be worse than no location at all. */
+.chat-picked {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-top: 1px solid var(--line);
+  background: var(--info-tint);
+  font-size: 10.5px;
+  color: var(--ink-2);
+}
+
+.chat-picked span { font-weight: 600; }
+.chat-picked code { color: var(--ink-3); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+.chat-picked button {
+  margin-left: auto;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--ink-3);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.chat-picked button:hover { color: var(--ink); }
+
+
+/* The subject of a comparison, so it is findable at a glance among the places it is set against. */
+.chat-bars .stat-row.is-subject .stat-name,
+.chat-bars .stat-row.is-subject .stat-value {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.chat-bars .stat-row.is-subject .stat-sub { color: var(--accent); opacity: 0.75; font-weight: 400; }
+
+
+/* ---- provenance on the panel's own figures --------------------------------------------------- */
+
+/* Spans the summary band's grid so it reads as a caption for all four numbers, not a fifth cell. */
+.summary-observed {
+  grid-column: 1 / -1;
+  margin: 4px 0 0;
+  font-size: 9.5px;
+  color: var(--ink-3);
+}
+
+/* The marker linking a figure to the source it came from. Small, but it is the difference between
+   "53.3%" and "53.3%, from the source whose provenance was never established". */
+.stat-cite {
+  margin: 0 3px 0 1px;
+  color: var(--ink-3);
+  font-size: 8.5px;
+  font-weight: 700;
+  vertical-align: super;
+  line-height: 0;
+}
+
+.stat-source .stat-cite { margin-right: 4px; vertical-align: baseline; font-size: 9px; }
+
+
+/* ---- ask the assistant about a figure -------------------------------------------------------- */
+
+/* Its own control rather than the row's click, which already zooms the map. Always visible rather
+   than hover-only: a hover-only affordance does not exist on a touch screen, and an invitation
+   nobody sees is not an invitation. */
+.stat-explain {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  margin-left: 6px;
+  padding: 0;
+  border: 1px solid var(--line-2);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.stat-explain:hover {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.stat-explain:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }

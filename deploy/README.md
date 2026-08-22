@@ -93,3 +93,22 @@ The pipeline serialises itself, so an overlapping run is harmless.
 rate-limits to one per 30s. But it is the *timer* that keeps the data current, and it works with the
 web server stopped. Update and serve are separate jobs; coupling them would mean a crashed web
 server silently stops the data updating too.
+
+## Behind a reverse proxy
+
+`POST /api/chat` streams its answer as server-sent events. nginx buffers proxied responses by
+default, which would hold the whole answer back and deliver it in one lump — reproducing exactly the
+delay the streaming was added to remove. The server sets `x-accel-buffering: no`, which nginx
+honours, but be explicit for that location anyway:
+
+```nginx
+location /api/chat {
+    proxy_pass http://127.0.0.1:5180;
+    proxy_buffering off;
+    proxy_read_timeout 120s;
+}
+```
+
+And note what putting a proxy in front actually changes: the server has no authentication of its
+own. `POST /api/run` executes a pipeline and `POST /api/chat` spends your Anthropic API key. If you
+expose either beyond loopback, put authentication in front of it.

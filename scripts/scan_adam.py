@@ -139,9 +139,12 @@ def parse_impact_table(blob: bytes) -> dict[str, dict[str, float]]:
 def apply_to_index(event: dict, by_region: dict[str, dict[str, float]], retrieved: str) -> list[str]:
     """Write the ADAM figures into index.json as an additional Stat per dataset.
 
-    The supplied "Flood risk share" figures are left alone. They measure something different —
-    risk rather than observed impact — and the two disagree sharply for Yangon and Bago, so
-    overwriting one with the other would quietly destroy information. Both are shown, each labelled.
+    Only this stat is touched; anything else already on a dataset is left alone. There used to be a
+    supplied "Flood risk share" alongside it, kept on the reasoning that risk and observed impact
+    measure different things. It was removed in Aug 2026 once it turned out to have no source at
+    all, to be a closed 16/9/4/1-of-30 tally rather than a rate, and to invert the ranking of every
+    measured dataset here. The preserve-what-you-did-not-write behaviour stays: a future supplied
+    figure should survive a run, not be silently overwritten by it.
     """
     if not INDEX_PATH.exists():
         return []

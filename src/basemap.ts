@@ -119,10 +119,30 @@ const GIBS_LAYERS: Record<string, { layer: string; label: string; attribution: s
     // Bands 7-2-1 put water almost black, vegetation vivid green and cloud cyan. It is the standard
     // combination for seeing standing water from optical imagery, and far more legible for flooding
     // than true colour, where wet ground and shadow look alike.
-    layer: 'MODIS_Terra_CorrectedReflectance_Bands721',
-    label: 'MODIS bands 7-2-1',
+    //
+    // **Why VIIRS, when the band numbers naming the combination are MODIS's.** MODIS images a
+    // 2330 km swath but consecutive orbits are ~2750 km apart, so below about 30° latitude each day
+    // leaves a wedge of ground no pass looked at. Myanmar (10–28°N) sits inside it, and the wedge
+    // lands on the map as a black diagonal band across the country. Measured over five inland tiles,
+    // Terra loses 1.6–25.9% of the region depending on the day — 25.9% on 2026-08-08. Aqua is no
+    // answer: it gaps too, one tile column east, up to 57% on that same day.
+    //
+    // The gap cannot be filled by layering another pass underneath, because GIBS bakes no-data in as
+    // **opaque black**. These tiles are JPEG whatever extension is asked for, and even the WMS
+    // endpoint with TRANSPARENT=TRUE returns 44.3% opaque black and 0% transparent on the worst
+    // tile. Nor can the black be keyed out in the client: in this band combination **water is
+    // near-black by design**, so keying it would punch holes in the flood water the map exists to
+    // show.
+    //
+    // VIIRS images 3060 km, which overlaps itself at every latitude — measured 0.0–0.9% no-data
+    // across all six dates this viewer uses, on the same tiles where Terra lost a quarter of the
+    // country. M11-I2-I1 is the same physics as 7-2-1 (SWIR, NIR, red), so the picture reads
+    // identically; the cost is 375 m against MODIS's 250 m, which is the price of never losing a
+    // wedge of the map to an orbit gap.
+    layer: 'VIIRS_SNPP_CorrectedReflectance_BandsM11-I2-I1',
+    label: 'VIIRS bands M11-I2-I1',
     attribution:
-      'Imagery: <a href="https://worldview.earthdata.nasa.gov/" target="_blank" rel="noopener">NASA EOSDIS GIBS</a> — MODIS/Terra bands 7-2-1',
+      'Imagery: <a href="https://worldview.earthdata.nasa.gov/" target="_blank" rel="noopener">NASA EOSDIS GIBS</a> — VIIRS/Suomi NPP bands M11-I2-I1 (the 7-2-1 flood combination)',
   },
 }
 

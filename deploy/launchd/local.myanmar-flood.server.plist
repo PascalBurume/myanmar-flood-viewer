@@ -28,6 +28,16 @@
     <key>SITE_DIR</key><string>__SITE__</string>
     <key>PUBLISH_DIR</key><string>__SITE__</string>
     <key>PATH</key><string>__PATH__</string>
+    <!--
+      The panel assistant is optional and off unless ANTHROPIC_API_KEY is set.
+
+      Do not put a key here. This plist lives in ~/Library/LaunchAgents and is readable by anything
+      running as you, and install.sh rewrites it from a template in the repo — a key added here is
+      one slip away from being committed. launchd has no EnvironmentFile equivalent, so if you want
+      the assistant running under launchd, load the key from your keychain in a wrapper script and
+      point ProgramArguments at that instead. Running `ANTHROPIC_API_KEY=... npm start` by hand is
+      the simpler answer for a personal machine.
+    -->
   </dict>
 
   <key>RunAtLoad</key><true/>

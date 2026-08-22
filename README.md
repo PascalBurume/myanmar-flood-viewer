@@ -43,12 +43,12 @@ gone; the early commits in this repository are that original work.
 
 ## Regions
 
-| Region | Event | Imaged | Flood risk share | ADAM impact (people) |
-|---|---|---|---:|---:|
-| Yangon Region | monsoon | 2021-08-25 & 08-31 | 53.3% | 962 |
-| Bago Region | monsoon | 2021-08-25 & 08-31 | 30.0% | 153,336 |
-| Mandalay Region | Typhoon Yagi | 2024-09-15 & 09-24 | 13.3% | — |
-| Nay Pyi Taw Union Territory | Typhoon Yagi | 2024-09-15 & 09-24 | 3.3% | — |
+| Region | Event | Imaged | ADAM impact (people) |
+|---|---|---|---:|
+| Yangon Region | monsoon | 2021-08-25 & 08-31 | 962 |
+| Bago Region | monsoon | 2021-08-25 & 08-31 | 153,336 |
+| Mandalay Region | Typhoon Yagi | 2024-09-15 & 09-24 | — |
+| Nay Pyi Taw Union Territory | Typhoon Yagi | 2024-09-15 & 09-24 | — |
 
 Event dates differ by region because no single UNOSAT product covers all four.
 
@@ -56,12 +56,12 @@ Event dates differ by region because no single UNOSAT product covers all four.
 > finding.** The 2021 analysis extent barely reaches Yangon Region. Turn on **Estimation extent** to
 > see exactly what was assessed — the boundary runs east of Yangon city.
 
-**Two figures per region, and they disagree.** *Flood risk share* was supplied to this project and
-is marked **unverified** — it is exactly 16/9/4/1 of 30 records, so a tally rather than a modelled
-probability, and its origin is undocumented; *ADAM impact* is observed, sourced and dated. Across five ADAM
-events Bago accounts for ~85% of affected people and Yangon ~5% — close to the inverse of the risk
-shares. They may simply measure different things (exposure versus outcome), which is why both are
-shown, each labelled.
+**Every figure shown is sourced and dated.** A second set of per-region *flood risk share*
+percentages was supplied to this project without a citation and shown here for a time, marked
+unverified. They were removed in Aug 2026: no source could be found, they turned out to be a closed
+tally (16/9/4/1 of 30 records, summing to 100% across those four regions alone) rather than a
+modelled probability, and they inverted the ranking of both measured datasets — putting Yangon above
+Bago where WFP ADAM has Bago at 99.4% to Yangon's 0.6%. They remain in the git history.
 
 ## Layers
 
@@ -87,9 +87,58 @@ npm start        # build, then serve on http://127.0.0.1:5180
 | `GET /api/status` | the published pipeline status |
 | `GET /api/run` | the state of the current or last run |
 | `POST /api/run` | start a run — this is what the **Run update now** button calls |
+| `GET /api/chat` | whether the assistant is configured (never the key itself) |
+| `POST /api/chat` | the assistant's streamed reply |
 
 With the server running, the panel's trigger button works. Served as plain static files the page
 still works fully; it just detects there is no backend and hides the button.
+
+## The assistant (optional)
+
+The panel's **Assistant** tab answers questions from the data this viewer already holds. It is off
+unless an API key is present. Put one in a `.env` file at the project root:
+
+```bash
+cp .env.example .env
+```
+
+then edit the one line:
+
+```
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+and start the server:
+
+```bash
+npm start
+```
+
+`.env` is gitignored. A real environment variable always wins over the file, so
+`ANTHROPIC_API_KEY=sk-ant-... npm start` still works for a one-off, and a systemd
+`EnvironmentFile=` overrides it in production.
+
+Without a key everything else works exactly as before, and the tab says so rather than failing.
+
+The key stays on the server — the browser never sees it. `POST /api/chat` pins the model, the
+system prompt, the tool definitions and every sampling parameter, and accepts only the conversation
+itself; anything else in the request body is rejected. The tool-calling loop runs in the browser,
+because the tools that move the map act on the page's own state and the tools that compute figures
+call the same code the panel renders from — so the assistant and the panel cannot disagree about
+what the data says.
+
+Answers are grounded structurally rather than by instruction. Every tool returns its dataset,
+observation date and caveats alongside the figure, a chart cannot be drawn without naming its
+source, and a deterministic check flags any number in the reply that appears in no tool result.
+
+Tool definitions are validated by `npm run check:tools`, and the grounding check has unit tests in
+`npm run check:grounding`. Both run at the start of every build. It enforces the constraints the Anthropic API applies at request time — the strict-tool
+limit, the schema keywords strict mode forbids — so a broken tool fails locally rather than in
+front of a reader.
+
+**This is the one part of the viewer that contacts a third party.** Questions, and the data needed
+to answer them, are sent to the Anthropic API. The tab says so on screen. Everything else in this
+project still contacts nothing but basemap tiles.
 
 The server binds to `127.0.0.1` and has **no authentication** — `POST /api/run` executes a pipeline
 on the machine. Put a reverse proxy with auth in front of it before exposing it anywhere.

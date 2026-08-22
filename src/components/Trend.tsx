@@ -10,6 +10,9 @@ export interface Observation {
   cropland: number
   observed: number
   peopleSuspect?: boolean
+  /** What the bad product actually claimed, kept so the withholding can be explained rather than
+   *  just asserted. Present only alongside `peopleSuspect`. */
+  peopleReported?: number
 }
 
 export interface History {
@@ -42,7 +45,7 @@ export function useHistory(base: string, reload = 0): History | null {
   return history
 }
 
-type Metric = 'people' | 'flooded'
+export type Metric = 'people' | 'flooded'
 type Window = 365 | 1095 | 0
 
 const WINDOWS: { key: Window; label: string }[] = [
@@ -52,10 +55,58 @@ const WINDOWS: { key: Window; label: string }[] = [
 ]
 
 /** Days between passes beyond which the record is broken rather than merely sparse. */
-const GAP_DAYS = 120
+export const GAP_DAYS = 120
 
-function daysBetween(a: string, b: string) {
+export function daysBetween(a: string, b: string) {
   return Math.round((Date.parse(b) - Date.parse(a)) / 86_400_000)
+}
+
+/** The series trimmed to a trailing window. `days === 0` means the whole record. */
+export function windowSeries(series: Observation[], days: number): Observation[] {
+  if (!days) return series
+  const cut = new Date()
+  cut.setUTCDate(cut.getUTCDate() - days)
+  const iso = cut.toISOString().slice(0, 10)
+  return series.filter((r) => r.date >= iso)
+}
+
+/** Where the record is broken rather than merely sparse. */
+export function historyGaps(series: Observation[]): { from: string; to: string; days: number }[] {
+  const out: { from: string; to: string; days: number }[] = []
+  for (let i = 1; i < series.length; i++) {
+    const days = daysBetween(series[i - 1].date, series[i].date)
+    if (days > GAP_DAYS) out.push({ from: series[i - 1].date, to: series[i].date, days })
+  }
+  return out
+}
+
+/**
+ * The headline figures for one metric: latest, previous, change, peak — plus how much of the record
+ * was unusable.
+ *
+ * `withheld` is reported rather than quietly dropped. 25 of the 142 observations carry a population
+ * the pipeline refused to publish, and a summary that silently skipped them would describe a
+ * different record than the one the chart draws.
+ */
+export function trendFacts(series: Observation[], metric: Metric) {
+  const value = (r: Observation) => (metric === 'people' ? (r.people ?? 0) : r[metric])
+  const usable = series.filter((r) => (metric === 'people' ? r.people !== null : true))
+  if (!usable.length) {
+    return { latest: null, previous: null, changeRatio: null, peak: null, passes: series.length, withheld: series.length - usable.length, gapBeforePrevious: null }
+  }
+  const latest = usable[usable.length - 1]
+  const previous = usable.length > 1 ? usable[usable.length - 2] : null
+  return {
+    latest,
+    previous,
+    changeRatio: previous && value(previous) > 0 ? (value(latest) - value(previous)) / value(previous) : null,
+    peak: usable.reduce((a, b) => (value(b) > value(a) ? b : a)),
+    passes: series.length,
+    withheld: series.length - usable.length,
+    // Named so a caller can say "vs 2024-07-30" instead of "vs the previous pass" across a
+    // four-year hole in the archive.
+    gapBeforePrevious: previous ? daysBetween(previous.date, latest.date) : null,
+  }
 }
 
 const km2 = (n: number) => `${Math.round(n).toLocaleString()} km²`
@@ -141,16 +192,7 @@ export function Trend({ history }: { history: History }) {
     if (el) el.scrollLeft = el.scrollWidth
   }, [metric, days, history.series])
 
-  const rows = useMemo(() => {
-    let s = history.series
-    if (days) {
-      const cut = new Date()
-      cut.setUTCDate(cut.getUTCDate() - days)
-      const iso = cut.toISOString().slice(0, 10)
-      s = s.filter((r) => r.date >= iso)
-    }
-    return s
-  }, [history.series, days])
+  const rows = useMemo(() => windowSeries(history.series, days), [history.series, days])
 
   const usable = rows.filter((r) => (metric === 'people' ? r.people !== null : true))
   if (!usable.length) {

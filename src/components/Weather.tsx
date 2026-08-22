@@ -34,6 +34,11 @@ export interface RiverPoint {
   peakDate: string
   max30: number
   cellSuspect?: boolean | null
+  /** The flow in this cell when it was chosen, so drift can be detected rather than published. */
+  typicalWhenChosen?: number
+  /** Whether the gauge sits off the town it is named for. It usually does, deliberately: the cell
+   *  is a channel cell, not the town's own coordinates. */
+  offsetFromTown?: boolean
 }
 
 export interface WeatherDoc {
@@ -123,10 +128,45 @@ function RainRow({ point, max }: { point: RainPoint; max: number }) {
  * half is drawn with the ensemble envelope behind it, because GloFAS's own spread widens from about
  * ±1% tomorrow to −11%/+38% two weeks out, and a single confident line would hide that.
  */
+/**
+ * Rivers worst-first by current flow, and rain worst-first by the week either side.
+ *
+ * Both orderings are the panel's, lifted so the assistant answers "which river is highest" with the
+ * same list the reader is looking at.
+ */
+export function sortedRivers(doc: WeatherDoc): RiverPoint[] {
+  return [...doc.rivers].sort((a, b) => b.now - a.now)
+}
+
+export function sortedRain(doc: WeatherDoc): RainPoint[] {
+  return [...doc.rain].sort((a, b) => b.past7 + b.next7 - (a.past7 + a.next7))
+}
+
+/**
+ * One gauge's headline figures.
+ *
+ * `isForecast` is per-day and not negotiable: everything at or beyond `today` is a model output,
+ * and this is the only dataset in the viewer that is not an observation of something that already
+ * happened.
+ */
+export function riverFacts(point: RiverPoint) {
+  return {
+    name: point.name,
+    now: point.now,
+    peakAhead: point.peakAhead,
+    peakDate: point.peakDate,
+    max30: point.max30,
+    changeRatio: point.now > 0 ? (point.peakAhead - point.now) / point.now : 0,
+    cellSuspect: point.cellSuspect ?? false,
+    offsetFromTown: point.offsetFromTown ?? false,
+    days: point.days.map((d) => ({ ...d, isForecast: d.date > point.today })),
+  }
+}
+
 function RiverRow({ point }: { point: RiverPoint }) {
   const all = point.days
   const max = Math.max(...all.map((d) => d.hi || d.q), 1)
-  const change = point.now > 0 ? (point.peakAhead - point.now) / point.now : 0
+  const change = riverFacts(point).changeRatio
   return (
     <div className="wx-row">
       <div className="wx-head">
@@ -178,8 +218,8 @@ function RiverRow({ point }: { point: RiverPoint }) {
 export function Weather({ doc }: { doc: WeatherDoc }) {
   const [tab, setTab] = useState<'rain' | 'rivers'>('rivers')
   const rainMax = Math.max(...doc.rain.flatMap((p) => p.days.map((d) => d.mm)), 1)
-  const rivers = [...doc.rivers].sort((a, b) => b.now - a.now)
-  const rain = [...doc.rain].sort((a, b) => b.past7 + b.next7 - (a.past7 + a.next7))
+  const rivers = sortedRivers(doc)
+  const rain = sortedRain(doc)
 
   return (
     <div className="weather">

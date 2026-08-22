@@ -81,12 +81,61 @@ centroid assignment would discard them. `--exclude-name` exists because geoBound
 
 ### Statistics
 
-Each region carries two figures, and they disagree. *Flood risk share* was supplied to the project, is marked
-**unverified** in the UI, and is exactly 16/9/4/1 of 30 records — a tally, not a modelled
-probability. Its provenance is still unestablished. *Flood impact (people)* comes from WFP ADAM with an
-event id and retrieval date. Across five ADAM events Bago is ~85% of affected people and Yangon
-~5% — close to the inverse of the supplied shares. `scan_adam.py` deliberately does **not**
-overwrite the supplied figures; both are shown, each labelled.
+Every statistic shown is now sourced and dated. *Flood impact (people)* comes from WFP ADAM with an
+event id and retrieval date; *People exposed (nationwide)* from UNOSAT FloodAI with its service id
+and observation date.
+
+**The supplied *Flood risk share* figures were removed in Aug 2026** (Yangon 53.3%, Bago 30.0%,
+Mandalay 13.3%, Nay Pyi Taw 3.3% — recoverable from git). They had been shown alongside the ADAM
+impact figures and labelled unverified, on the reasoning that the two measured different things and
+dropping either would destroy information. Three findings ended that:
+
+- **No provenance.** They were supplied without a citation, and a search in Aug 2026 found none.
+- **A closed tally, not a rate.** Exactly 16/9/4/1 of 30 records, summing to 100% — so they counted
+  something across those four regions alone. Nothing about Myanmar as a whole.
+- **They invert the measured ranking.** Both datasets here put Bago above Yangon; the shares put
+  Yangon first. WFP ADAM has Bago at 99.4% against Yangon's 0.6%; UNOSAT FloodAI (2026-08-08) has
+  53.7% against 28.3%. Mandalay and Nay Pyi Taw were close to FloodAI — it was the top two that were
+  swapped.
+
+An unsourced figure that also contradicts the measured data is not a second perspective, and a
+label saying so is weaker than not printing the number. `Stat.unverified` remains in the schema and
+the assistant still carries the "unverified is not sourced" rule, because the next supplied figure
+should be labelled rather than quietly trusted.
+
+### Every figure on the panel says where it came from
+
+The project's rule is that a number never appears without its source and date. The panel's three
+most numeric blocks were breaking it — the summary band, Worst affected and Statistics all showed
+bare figures — which became obvious once the assistant beside them started citing a service id and
+observation date on everything it said.
+
+- The summary band and Worst affected carry the observation date, read via `observedRange(places)`
+  from the per-feature `Observed` property. It returns a **range** when passes disagree, because one
+  UNOSAT product stitches several together and two townships in one file can have been looked at on
+  different days.
+- Statistics **numbers** its sources and marks each row with the matching superscript. A flat list
+  at the bottom left no way to tell which figure came from where — and these rows come from three
+  very different places, one of which is the set whose provenance was never established. A reader
+  deciding how much to trust `53.3%` has to be able to find that it is the unsourced one.
+
+**`flex: none` on `.summary-band`, for the third time in this file.** It sets `overflow: hidden` to
+keep the cell backgrounds inside its rounded corners, which makes its implicit `min-height: auto`
+resolve to 0 inside `.panel-body`'s flex column. Adding one line of caption was enough to make the
+whole band collapse to its 2px of border and disappear. It had been one added element away from that
+the entire time. Any new block in the panel that sets `overflow: hidden` needs `flex: none` with it.
+
+### Panel width is one token, read by both halves
+
+`--panel-w` in `:root` (384px, 440px above 1500px) is the only place the width is written down.
+`.panel` uses it, and `fitPadding` in `src/App.tsx` **reads it back out** with `getComputedStyle`
+rather than repeating the number.
+
+That indirection is the point. The two used to be separate constants, so widening the panel would
+have silently started fitting data underneath it — which is the one thing that padding exists to
+prevent, and it would have looked like a map bug rather than a CSS one. The panel grew from 320px
+when it stopped being a legend and became a reading surface with an assistant in it; mobile is
+untouched, since the bottom sheet is full width either way.
 
 ## Card styling
 
@@ -158,15 +207,28 @@ Reference repository: https://github.com/shiwaku/dm-converter/tree/main/viewer
     different day is a different map. `getBasemapStyle` returns imagery before the cache lookup.
   - `defaultImageryDate()` is *yesterday* UTC: GIBS assembles a day's imagery after the fact, so
     today is usually empty.
-  - Bands 7-2-1 (MODIS) is the standard flood combination — water near-black, vegetation green,
-    cloud cyan. True colour cannot separate wet ground from shadow.
+  - Bands 7-2-1 is the standard flood combination — water near-black, vegetation green, cloud cyan.
+    True colour cannot separate wet ground from shadow.
+  - **It is served from VIIRS, not MODIS, though MODIS's band numbers name it.** MODIS images
+    2330 km per pass against ~2750 km between consecutive orbits, so below ~30° latitude each day
+    leaves a wedge nothing looked at, and Myanmar (10–28°N) sits in it. It arrives as a **black
+    diagonal band across the country**: measured over five inland tiles, Terra loses 1.6–25.9% of
+    the region depending on the day. Aqua gaps too, one tile column east (57% on the same day).
+    The gap cannot be layered over — GIBS bakes no-data in as **opaque black**, serving JPEG
+    whatever extension is asked for, and even WMS with `TRANSPARENT=TRUE` returns 44.3% opaque
+    black and 0% transparent. Nor can the black be keyed out, because **water is near-black by
+    design here**, so keying it would punch holes in the flood water itself. VIIRS images 3060 km
+    and overlaps at every latitude: 0.0–0.9% no-data across all six dates this viewer uses.
+    `M11-I2-I1` is the same physics (SWIR, NIR, red) at 375 m rather than 250 m — the resolution is
+    the price of never losing a wedge of the map.
   - Optical imagery is frequently cloud-covered during monsoon flooding. That is not a bug and it
     is the reason the detection underneath is radar; the README says so to the reader.
 - **Cloud-free** is EOX's Sentinel-2 cloudless (CC BY-NC-SA 4.0 — note the NC), a composite that
   keeps the clear pixel from many passes. It answers "I cannot see the ground", not "show me the
   flood": it is a yearly mosaic and carries no date.
 - **`tileCloudiness()` must handle both products.** Cloud is white in true colour but **cyan** in
-  bands 7-2-1, because band 7 is dark over cloud while 2 and 1 are bright. A
+  bands 7-2-1, because the SWIR band is dark over cloud while the NIR and red bands are bright
+  (M11/I2/I1 on VIIRS behave as 7/2/1 do on MODIS, which is why the swap preserved the scoring). A
   brightness-and-greyness test alone scored a measured 87%-cloud 7-2-1 tile at **0%** — it reported
   a solid-cloud day as perfectly clear. Both signatures are counted; that is safe because
   true-colour water is dark rather than cyan and 7-2-1 land is green. A tile that is mostly no-data
@@ -323,6 +385,83 @@ update and serve are separate jobs, and coupling them would mean a crashed web s
 the data updating too.
 
 
+## The assistant
+
+The panel's second tab answers questions from this viewer's own data. Optional: with no
+`ANTHROPIC_API_KEY` on the server the tab explains itself and nothing else changes.
+
+**The tool loop runs in the browser; the server is a key-holding pipe.** Three reasons, and the
+third is the one that matters most here:
+
+- The map tools act on React state that only exists in the page. A server-side loop would need a
+  callback channel back into the browser — long-poll plus a session store — which is more machinery
+  than the whole feature.
+- It matches the existing precedent: the server does not parse the pipeline's `[[stage]]` markers
+  either. `parseRunProgress` lives in the client. The server stays a dumb pipe.
+- **The analysis is TypeScript, and forking it would let the two halves disagree.** `rank_places`
+  calls the same `rankPlaces()` the panel renders from; `pipeline_status` calls the same
+  `freshness()`/`liveAlerts()` the chip does. A second implementation in `.mjs` would be exactly the
+  drift "one threshold, two consumers, no drift" forbids — and the disagreeing consumer would be the
+  one quoting numbers at a reader.
+
+**`messages` is the only thing accepted from the client.** Model, system prompt, tools, `max_tokens`,
+thinking, effort and `task_budget` are all pinned in `server/index.mjs`; any other top-level key is a
+400. Without that allowlist this is not a proxy but an open relay for the operator's API key. There
+are deliberately **no CORS headers**, and an origin check refuses cross-origin requests — which also
+closed a real CSRF hole on `POST /api/run`, where a cross-site form post needs no preflight and
+starts a pipeline.
+
+**SSE, the first streaming response in the codebase.** Polling — the house pattern for `GET /api/run`
+— only works there because there is exactly one global run to poll; a chat turn has no such
+singleton, so polling would need the per-request buffer and GC that statelessness avoids. Two traps:
+the response must not use the `json()` helper (it sets `content-length`), and it sets
+`x-accel-buffering: no` because nginx would otherwise buffer the stream into one lump and reproduce
+the exact delay streaming was added to remove. `req.on('close')` aborts the upstream call — without
+it, closing the tab leaves a request running and billing.
+
+**Grounding is structural, not prompted.** Every tool returns an envelope carrying `dataset`, the
+observation date and `caveats`, so the model cannot see a figure without its provenance. `show_chart`
+refuses to render without a `source`. And `ungroundedFigures()` in `src/chat/context.ts` checks, in
+plain code with no model involved, that every number in the answer appears in some tool result —
+it cannot be talked out of its verdict, which is the point.
+
+**Cost.** Sonnet 5, `effort: medium`, nothing Opus-priced anywhere — `grep "claude-" server/index.mjs`
+should only ever return `claude-sonnet-5`. Prompt caching is the largest lever: the tools + system +
+`<context>` prefix is identical on every turn of a conversation, so it is read at ~0.1x. **A clock in
+the `<context>` block would silently disable it** and charge full price every turn, which is why that
+block carries only dates read from the data. Watch `cache_read_input_tokens` in the tab's footer;
+zero across turns means an invalidator has crept in.
+
+**The grounding check is unit-tested, and both its bugs were false positives.** `ungroundedFigures()`
+lives alone in `src/chat/grounding.ts` with **no imports**, so `scripts/check_grounding.mjs` can run
+it directly (Node executes the TypeScript). It is the one part of the assistant that makes a claim
+*about the assistant* to the reader — "treat that figure with suspicion" — so it has to be right in
+both directions, and a false positive is the worse failure: it teaches the reader to ignore the
+warning, and then the real one goes unread.
+
+Both bugs came from the same place: **the answer and the sources being parsed differently.** The
+second one is the sharper lesson — the answer side stripped thousands separators and the source side
+did not, so a figure written `259,738 km²` inside an alert's prose was read as `259` and `738`,
+matched nothing, and a correctly quoted number was reported to the reader as invented. Any change
+there must keep the two sides on the same regex, and the tests exist to say so.
+
+**Tool definitions are checked before they can build.** Six separate faults reached a live request
+during this feature's development, every one of them invisible to the type checker and rejected by
+the API rather than by the build: `minimum`/`maximum`, `maxItems`/`maxLength`, a nullable enum, 22
+strict tools against a limit of **20**, a schema with no handler, and a strict tool with a property
+missing from `required`. So the rules live in `scripts/check_chat_tools.mjs`, which runs first in
+`npm run build` — before `tsc`, before vite — and names the tool and the fix.
+
+The one related check that *is* the compiler's job stays there: `TOOL_LABEL` in `Assistant.tsx` is
+typed `Record<ToolName, string>`, with `ToolName` derived from the `HANDLERS` object via
+`satisfies`, so adding a tool without a reader-facing label is a compile error. It had shipped raw
+twice before that type existed, because nothing objected either time.
+
+**Dev mode proxies `/api/chat` and nothing else.** Proxying all of `/api` looks tidier and breaks
+`checkServer()`: with the real server stopped Vite answers a proxy `ECONNREFUSED` with **500**, and
+`checkServer()` deliberately tests `status !== 404`, so a stopped server would look present and the
+"Run update now" button would come back broken.
+
 ## The update pipeline
 
 `scripts/run_pipeline.py` is the only entrypoint: gate → UNOSAT (skipped) → ADAM → record status →
@@ -354,8 +493,10 @@ Two ordering traps in `stage_publish`, both hit and fixed:
 `BASE_PATH` (read in `vite.config.ts`) sets the base for the build. It defaults to `/`, a domain
 root; set `/flood/` to serve under a sub-path.
 
-**The served page contacts nothing but the basemap tiles.** All pipeline state comes from
-`status.json` and, when the local server is running, from its own `/api/*` endpoints.
+**The served page contacts nothing but the basemap tiles — with one deliberate exception.** All
+pipeline state comes from `status.json` and, when the local server is running, from its own
+`/api/*` endpoints. The assistant (below) is the single feature that reaches a third party, and
+only when an API key has been configured; unconfigured, the claim above holds unchanged.
 
 ### The pipeline records its own history
 
@@ -468,13 +609,14 @@ not a pipeline. Python's `zipfile` stands in for `unzip`.
 - [x] build the viewer (MapLibre + Vite + TypeScript), then move the UI to React
 - [x] add UNOSAT FloodAI: nationwide, per-township exposure, discovered rather than pinned
 - [x] add WFP ADAM impact figures alongside the supplied risk shares, each labelled
+- [x] remove the unsourced flood risk shares — no provenance, and they inverted the measured ranking
 - [x] English basemaps and labels; NASA GIBS dated imagery and EOX cloud-free
 - [x] make the pipeline self-hosting: one entrypoint, own server, atomic publish, no CI service
 - [x] record the pipeline's own run state in `status.json`, on every run
 - [x] add monitoring: the multi-year trend, locally-recorded alerts, and `/api/health`
 - [x] add weather: IMERG rainfall on the map, Open-Meteo rain and GloFAS discharge forecasts
 - [x] draw the run as a live horizontal stepper fed by the pipeline's own progress markers
-- [ ] replace the *citation pending* source on the flood risk share figures
+- [x] add a grounded assistant in the panel: client-side tool loop, key-holding server proxy
 - [ ] decide whether to extend or stop the scan when `SCAN_UNTIL` (2026-09-14) is reached
 - [ ] add drawing code if a new layer kind arrives (anything outside `LAYER_KINDS`:
       `waterextent` / `floodextentearly` / `floodextent` / `inputarea` / `exposure`)

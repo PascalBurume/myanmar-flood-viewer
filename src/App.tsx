@@ -34,7 +34,7 @@ import {
   type StatusDoc,
 } from './pipeline'
 import { applyThemeAttr, initialTheme, type Theme } from './theme'
-import { popupHeadings, useMapOverlays } from './useMapOverlays'
+import { popupHeadings, queryableLayerIds, useMapOverlays } from './useMapOverlays'
 
 const BASE_URL = import.meta.env.BASE_URL
 
@@ -113,15 +113,26 @@ export function App({ initialIndex }: { initialIndex: DataIndex }) {
 
   const mapContainer = useRef<HTMLDivElement>(null)
   const popupRef = useRef<maplibregl.Popup | null>(null)
+  /** Where the reader last clicked. Lets a question be about "this spot" without them reading
+   *  coordinates off the screen and typing them in. */
+  const [pickedPoint, setPickedPoint] = useState<{ lon: number; lat: number; label: string } | null>(null)
 
   useEffect(() => applyThemeAttr(theme), [theme])
 
   // Leave room on the left so the panel does not cover the data it describes.
+  //
+  // The width is read from the panel's own `--panel-w` token rather than repeated here. It used to
+  // be a second copy of the number, which meant widening the panel silently started fitting data
+  // underneath it — the exact failure this padding exists to prevent.
   const fitPadding = useMemo(() => {
-    const narrow = window.matchMedia('(max-width: 640px)').matches
-    return narrow
-      ? { top: 40, right: 40, bottom: 40, left: 40 }
-      : { top: 40, right: 40, bottom: 40, left: 360 }
+    if (window.matchMedia('(max-width: 640px)').matches) {
+      return { top: 40, right: 40, bottom: 40, left: 40 }
+    }
+    const w = Number.parseInt(
+      getComputedStyle(document.documentElement).getPropertyValue('--panel-w'),
+      10,
+    )
+    return { top: 40, right: 40, bottom: 40, left: (Number.isFinite(w) ? w : 320) + 40 }
   }, [])
 
   /**
@@ -151,6 +162,17 @@ export function App({ initialIndex }: { initialIndex: DataIndex }) {
 
   const onMapClick = useCallback(
     (features: maplibregl.MapGeoJSONFeature[], lngLat: maplibregl.LngLat) => {
+      // Record the spot whether or not anything was under it: "nothing is drawn here" is a
+      // perfectly good question to ask about, and often the more interesting one.
+      const near = places
+        .map((p) => ({ p, d: Math.hypot(p.lon - lngLat.lng, p.lat - lngLat.lat) }))
+        .sort((a, b) => a.d - b.d)[0]
+      setPickedPoint({
+        lon: Number(lngLat.lng.toFixed(5)),
+        lat: Number(lngLat.lat.toFixed(5)),
+        label: near && near.d < 0.6 ? `near ${near.p.township || near.p.region}` : 'this spot',
+      })
+
       const popup = popupRef.current
       if (!popup) return
       if (!features.length) {
@@ -159,7 +181,7 @@ export function App({ initialIndex }: { initialIndex: DataIndex }) {
       }
       popup.setLngLat(lngLat).setHTML(popupHtml(features, headings)).addTo(mapRef.current!)
     },
-    [headings],
+    [headings, places],
   )
 
   const overlayState = useMemo(
@@ -231,7 +253,7 @@ const zoomTo = useCallback(
 
   useEffect(() => {
     void import('maplibre-gl').then(({ default: ml }) => {
-      popupRef.current = new ml.Popup({ closeButton: true, closeOnClick: true, maxWidth: '320px' })
+      popupRef.current = new ml.Popup({ closeButton: true, closeOnClick: true, maxWidth: '340px' })
     })
   }, [])
 
@@ -292,7 +314,9 @@ const zoomTo = useCallback(
     [fitPadding, mapRef],
   )
 
-  const handleFitAll = useCallback(() => {
+  /** The camera move alone. Split out because the assistant's fit_all tool must move the map
+   *  without also closing a dialog the reader had open. */
+  const fitAllCamera = useCallback(() => {
     const boxes = index.datasets.map((d) => d.bbox).filter((b): b is [number, number, number, number] => !!b)
     if (!boxes.length) return
     mapRef.current?.fitBounds(
@@ -304,8 +328,118 @@ const zoomTo = useCallback(
       ],
       { padding: fitPadding },
     )
-    setAboutOpen(false)
   }, [index, fitPadding, mapRef])
+
+  const handleFitAll = useCallback(() => {
+    fitAllCamera()
+    setAboutOpen(false)
+  }, [fitAllCamera])
+
+  /**
+   * Letting the assistant *see* the map, not just move it.
+   *
+   * The flood extents are 12,731 polygons across ~5 MB — far too much to put in a prompt, and there
+   * is no aggregate the model could compute from them without a spatial join. But MapLibre is
+   * already a spatial index over exactly this data, and the popup code already asks it what is under
+   * a point. These helpers expose that same question to the tools.
+   *
+   * The thing to keep hold of: `queryRenderedFeatures` answers "what is currently DRAWN", not "what
+   * exists". A hidden layer returns nothing, the viewport clips everything outside it, and at low
+   * zoom small polygons are simplified away. So a hit means something and a miss means very little —
+   * the same asymmetry as the exposure data, and the tools have to say so.
+   */
+  const mapQuery = useMemo(
+    () => ({
+      viewport() {
+        const map = mapRef.current
+        if (!map) return null
+        const b = map.getBounds()
+        const c = map.getCenter()
+        return {
+          west: Number(b.getWest().toFixed(4)),
+          south: Number(b.getSouth().toFixed(4)),
+          east: Number(b.getEast().toFixed(4)),
+          north: Number(b.getNorth().toFixed(4)),
+          zoom: Number(map.getZoom().toFixed(2)),
+          center: { lon: Number(c.lng.toFixed(4)), lat: Number(c.lat.toFixed(4)) },
+        }
+      },
+
+      /** Which datasets have any traced extent covering a point, by bounding box. Coarse on purpose:
+       *  it answers "is there traced data near here at all", never "was this analysed and found dry". */
+      coverage(lon: number, lat: number) {
+        return index.datasets
+          .filter((d) => d.bbox && lon >= d.bbox[0] && lon <= d.bbox[2] && lat >= d.bbox[1] && lat <= d.bbox[3])
+          .map((d) => d.id)
+      },
+
+      /** What is drawn at a location. Off-screen returns `onScreen: false` rather than a false miss. */
+      at(lon: number, lat: number) {
+        const map = mapRef.current
+        if (!map) return null
+        const b = map.getBounds()
+        if (lon < b.getWest() || lon > b.getEast() || lat < b.getSouth() || lat > b.getNorth()) {
+          return { onScreen: false, features: [] as { layer: string; properties: Record<string, unknown> }[] }
+        }
+        const pt = map.project([lon, lat])
+        // A few pixels of slack: a thin polygon edge is otherwise almost impossible to hit.
+        const box: [[number, number], [number, number]] = [
+          [pt.x - 5, pt.y - 5],
+          [pt.x + 5, pt.y + 5],
+        ]
+        const ids = queryableLayerIds(index).filter((id) => map.getLayer(id))
+        const hits = map.queryRenderedFeatures(box, { layers: ids })
+        return {
+          onScreen: true,
+          features: hits.map((f) => ({ layer: f.layer.id, properties: (f.properties ?? {}) as Record<string, unknown> })),
+        }
+      },
+
+      /** What kinds of feature are drawn anywhere in the current view. */
+      inView() {
+        const map = mapRef.current
+        if (!map) return []
+        const ids = queryableLayerIds(index).filter((id) => map.getLayer(id))
+        if (!ids.length) return []
+        const hits = map.queryRenderedFeatures({ layers: ids })
+        return hits.map((f) => ({ layer: f.layer.id, properties: (f.properties ?? {}) as Record<string, unknown> }))
+      },
+    }),
+    [index, mapRef],
+  )
+
+  // What the assistant's tools can reach. Memoised so a keystroke in the composer does not rebuild
+  // it, and deliberately made of the very same values the panel renders from — a figure the
+  // assistant quotes and a figure the reader sees come from one source.
+  const chatContext = useMemo(
+    () => ({
+      index,
+      places,
+      status,
+      history,
+      weather,
+      map: { basemap, imageryDate, rain, kindVisible, kindOpacity, query: mapQuery },
+      actions: {
+        setKindVisible: (k: KindKey, v: boolean) => setKindVisible((s) => ({ ...s, [k]: v })),
+        setKindOpacity: (k: KindKey, v: number) => setKindOpacity((s) => ({ ...s, [k]: v })),
+        setDatasetVisible: (id: string, v: boolean) => setDatasetVisible((s) => ({ ...s, [id]: v })),
+        zoomTo,
+        zoomToDataset: (id: string) => {
+          const ds = index.datasets.find((d) => d.id === id)
+          if (ds) handleZoom(ds)
+        },
+        fitAll: fitAllCamera,
+        setBasemap,
+        setImageryDate,
+        setRain,
+      },
+    }),
+    [
+      index, places, status, history, weather,
+      basemap, imageryDate, rain, kindVisible, kindOpacity,
+      zoomTo, handleZoom, fitAllCamera, mapQuery,
+    ],
+  )
 
   /** Swap in newly published data without a reload, keeping the view and the toggles. */
   const handleApply = useCallback(async () => {
@@ -387,6 +521,12 @@ const zoomTo = useCallback(
         weather={weather}
         rain={rain}
         onRain={setRain}
+        chat={chatContext}
+        onRunPipeline={handleRun}
+        runBusy={busy}
+        onFitAll={fitAllCamera}
+        picked={pickedPoint}
+        onClearPicked={() => setPickedPoint(null)}
         pipelineSummary={pipelineSummary}
         footer={
           <>

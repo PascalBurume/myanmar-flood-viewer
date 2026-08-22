@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 
 import {
   EARLY_COLOR,
@@ -12,7 +12,9 @@ import {
   type KindKey,
 } from '../layers'
 import type { Theme } from '../theme'
-import { TopAffected, nationalTotals, type Place } from './TopAffected'
+import { TopAffected, nationalTotals, observedRange, type Place } from './TopAffected'
+import { Assistant } from './chat/Assistant'
+import type { ChatContext } from '../chat/tools'
 import { Trend, type History } from './Trend'
 import { Weather, type WeatherDoc } from './Weather'
 import { defaultRainDate } from '../basemap'
@@ -259,11 +261,34 @@ function LocationList({
  * Per-location figures as a ranked bar list. Bars are scaled against the largest value present
  * rather than against 100, so the comparison stays readable whatever range the figures span.
  */
-function Stats({ index, onZoom }: { index: DataIndex; onZoom: (ds: Dataset) => void }) {
+/** A statistic handed to the assistant, with everything needed to talk about it. */
+export interface ExplainRequest {
+  id: number
+  dataset: string
+  label: string
+  value: number
+  unit: string
+  source: string | null
+}
+
+function Stats({
+  index,
+  onZoom,
+  onExplain,
+}: {
+  index: DataIndex
+  onZoom: (ds: Dataset) => void
+  onExplain: (req: Omit<ExplainRequest, 'id'>) => void
+}) {
   const rows = index.datasets.flatMap((ds) => (ds.stats ?? []).map((stat) => ({ ds, stat })))
   if (!rows.length) return null
   const max = Math.max(...rows.map((r) => r.stat.value))
-  const sources = [...new Set(rows.map((r) => r.stat.source).filter(Boolean))]
+  // Numbered rather than merely listed. These rows come from three different places — a nationwide
+  // AI detection, a WFP impact table, and a set of figures whose provenance was never established —
+  // and a flat list at the bottom left no way to tell which number came from which. A reader
+  // deciding how much to trust "53.3%" has to be able to find that it is the unsourced one.
+  const sources = [...new Set(rows.map((r) => r.stat.source).filter(Boolean))] as string[]
+  const cite = (src?: string) => (src ? sources.indexOf(src) + 1 : 0)
   const sorted = [...rows].sort((a, b) => b.stat.value - a.stat.value)
 
   return (
@@ -286,16 +311,45 @@ function Stats({ index, onZoom }: { index: DataIndex; onZoom: (ds: Dataset) => v
             {/* The marker sits outside .stat-name: that span truncates with an ellipsis, which
                 would swallow the very thing it is there to make visible. */}
             <span className="stat-name">{`${datasetName(ds)} — ${stat.label}`}</span>
-            {stat.unverified ? <span className="stat-unverified">unverified</span> : null}
-            <span className="stat-value">{`${stat.value}${stat.unit ?? ''}`}</span>
+            {stat.unverified ? (
+              <span
+                className="stat-unverified"
+                title="No established source. See the numbered note below — this figure disagrees with the measured data in this viewer."
+              >
+                unverified
+              </span>
+            ) : null}
+            {cite(stat.source) ? <sup className="stat-cite">{cite(stat.source)}</sup> : null}
+            <span className="stat-value">{`${stat.value.toLocaleString()}${stat.unit ?? ''}`}</span>
+            <button
+              type="button"
+              className="stat-explain"
+              title="Ask the assistant about this figure"
+              aria-label={`Explain ${stat.label}`}
+              onClick={(e) => {
+                // The row itself zooms the map. Without this the reader would get both.
+                e.stopPropagation()
+                onExplain({
+                  dataset: datasetName(ds),
+                  label: stat.label,
+                  value: stat.value,
+                  unit: stat.unit ?? '',
+                  source: stat.source ?? null,
+                })
+              }}
+            >
+              ?
+            </button>
           </div>
           <div className="stat-track">
             <div className="stat-fill" style={{ width: `${max > 0 ? (stat.value / max) * 100 : 0}%` }} />
           </div>
         </div>
       ))}
-      {sources.map((src) => (
-        <p className="stat-source" key={src}>{`Source: ${src}`}</p>
+      {sources.map((src, i) => (
+        <p className="stat-source" key={src}>
+          <sup className="stat-cite">{i + 1}</sup> {src}
+        </p>
       ))}
     </div>
   )
@@ -322,6 +376,12 @@ export function Panel({
   weather,
   rain,
   onRain,
+  chat,
+  onRunPipeline,
+  runBusy,
+  onFitAll,
+  picked,
+  onClearPicked,
 }: {
   index: DataIndex
   theme: Theme
@@ -343,9 +403,20 @@ export function Panel({
   weather: WeatherDoc | null
   rain: RainState
   onRain: (v: RainState) => void
+  chat: ChatContext
+  onRunPipeline: () => void
+  runBusy: boolean
+  onFitAll: () => void
+  picked: { lon: number; lat: number; label: string } | null
+  onClearPicked: () => void
 }) {
   const [collapsed, setCollapsed] = useState(false)
+  const [tab, setTab] = useState<'layers' | 'assistant'>('layers')
+  /** A statistic the reader asked about. The counter lets the same one be asked about twice. */
+  const [explain, setExplain] = useState<ExplainRequest | null>(null)
+  const explainSeq = useRef(0)
   const totals = nationalTotals(places)
+  const observed = observedRange(places)
   const group = index.datasets.find((d) => d.group)?.group
 
   return (
@@ -358,6 +429,19 @@ export function Panel({
           <h1>Myanmar Floods</h1>
         </div>
         <div className="head-actions">
+          {/* Always reachable, and now load-bearing: the assistant can move the camera, and the map
+              writes its position into the URL hash, so a tool call that zooms somewhere becomes the
+              view the page reopens on. Without a way back, a reader can be left looking at an empty
+              corner of the country wondering where the data went. */}
+          <button
+            className="icon-btn"
+            type="button"
+            title="Show all data"
+            aria-label="Show all data"
+            onClick={onFitAll}
+          >
+            ⤢
+          </button>
           <button
             className="icon-btn"
             type="button"
@@ -379,7 +463,25 @@ export function Panel({
         </div>
       </header>
 
-      <div className="panel-body">
+      <div className="panel-tabs" role="tablist" aria-label="Panel sections">
+        {(['layers', 'assistant'] as const).map((key) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            id={`tab-${key}`}
+            aria-selected={tab === key}
+            aria-controls={`panel-${key}`}
+            onClick={() => setTab(key)}
+          >
+            {key === 'layers' ? 'Layers' : 'Assistant'}
+          </button>
+        ))}
+      </div>
+
+      {/* Both panes stay mounted and are hidden rather than unmounted. Remounting would reset the
+          layers scroll position and re-fire Trend's scroll-to-right effect on every tab switch. */}
+      <div className="panel-body" id="panel-layers" role="tabpanel" aria-labelledby="tab-layers" hidden={tab !== 'layers'}>
         <p className="notice">
           Two things at once. <strong>Nationwide</strong>: UNOSAT's AI detector over Sentinel-1,
           giving people exposed per township for the whole country, days old. <strong>Four
@@ -406,6 +508,8 @@ export function Panel({
               <span className="summary-value">{totals.places.toLocaleString()}</span>
               <span className="summary-label">townships</span>
             </div>
+            {/* The biggest numbers on the page had nothing on them saying when they were true. */}
+            {observed ? <p className="summary-observed">{`Observed ${observed} · UNOSAT FloodAI`}</p> : null}
           </div>
         ) : null}
 
@@ -465,7 +569,16 @@ export function Panel({
               ) : undefined
             }
           >
-            <Stats index={index} onZoom={onZoom} />
+            <Stats
+              index={index}
+              onZoom={onZoom}
+              onExplain={(req) => {
+                explainSeq.current += 1
+                setExplain({ ...req, id: explainSeq.current })
+                // Move the reader to the answer rather than leaving them to find the tab.
+                setTab('assistant')
+              }}
+            />
           </Field>
         ) : null}
 
@@ -479,6 +592,17 @@ export function Panel({
         >
           <div className="pipeline-summary">{pipelineSummary}</div>
         </Field>
+      </div>
+
+      <div id="panel-assistant" role="tabpanel" aria-labelledby="tab-assistant" hidden={tab !== 'assistant'} className="panel-pane">
+        <Assistant
+          ctx={chat}
+          onRunPipeline={onRunPipeline}
+          runBusy={runBusy}
+          picked={picked}
+          onClearPicked={onClearPicked}
+          explain={explain}
+        />
       </div>
 
       <footer className="panel-foot">{footer}</footer>

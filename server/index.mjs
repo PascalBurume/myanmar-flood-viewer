@@ -10,21 +10,52 @@
  * same reason — a tool that has to keep working unattended for months is better with nothing to
  * update than with a framework to keep patched.
  *
- * Binds to 127.0.0.1 by default. `POST /api/run` executes a pipeline on this machine, so it is not
- * something to expose to a network without putting authentication in front of it.
+ * Binds to 127.0.0.1 by default, and two endpoints are the reason that matters. `POST /api/run`
+ * executes a pipeline on this machine. `POST /api/chat` relays to the Anthropic API using the
+ * operator's own API key, so anything that can reach it can spend money. Neither has any
+ * authentication of its own; the loopback bind is the whole security model.
  *
  *   node server/index.mjs
  *   PORT=8080 HOST=0.0.0.0 PUBLISH_DIR=/var/www/flood node server/index.mjs
+ *   ANTHROPIC_API_KEY=sk-... node server/index.mjs     # enables the panel assistant
  */
 
 import { createServer } from 'node:http'
 import { spawn } from 'node:child_process'
 import { readFile, stat } from 'node:fs/promises'
-import { createReadStream } from 'node:fs'
+import { createReadStream, readFileSync } from 'node:fs'
 import { extname, join, normalize, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = resolve(fileURLToPath(new URL('../', import.meta.url)))
+
+/**
+ * Load `.env` from the project root, if there is one.
+ *
+ * Eight lines rather than a dotenv dependency, and it exists for one reason: the assistant needs an
+ * API key, and "export it in your shell every time" is a recipe for it eventually being pasted
+ * somewhere that gets committed. A gitignored file is the safer habit.
+ *
+ * A real environment variable always wins, so a systemd `EnvironmentFile=` or a one-off
+ * `ANTHROPIC_API_KEY=... npm start` still overrides whatever is in the file. Runs before anything
+ * below reads `process.env`.
+ */
+// No .env is the normal case, not an error — the file is optional and the server runs without it.
+let dotenv = ''
+try {
+  dotenv = readFileSync(join(ROOT, '.env'), 'utf8')
+} catch {
+  /* nothing to load */
+}
+for (const line of dotenv.split('\n').filter((l) => /^\s*[A-Za-z_][A-Za-z0-9_]*=/.test(l))) {
+  const i = line.indexOf('=')
+  const key = line.slice(0, i).trim()
+  // Strip one layer of quotes, which people add out of habit and which would otherwise become part
+  // of the value and produce a baffling 401.
+  const value = line.slice(i + 1).trim().replace(/^(['"])(.*)\1$/, '$2')
+  if (!(key in process.env)) process.env[key] = value
+}
+
 const PORT = Number(process.env.PORT ?? 5180)
 const HOST = process.env.HOST ?? '127.0.0.1'
 /** Where the built site lives. `npm run build` writes dist/; --publish writes wherever you point it. */
@@ -35,6 +66,65 @@ const STATUS_FILE = join(ROOT, 'public', 'data', 'status.json')
 /** Minimum gap between runs. The pipeline hits third-party APIs; this stops a stuck reload loop
  *  from hammering them, and makes an accidental double-click harmless. */
 const COOLDOWN_MS = 30_000
+
+// ---- the panel assistant -------------------------------------------------------------------
+//
+// This server is a thin, stateless proxy: it holds the API key and pins everything about the
+// request except the conversation itself. The tool-calling loop runs in the browser, because the
+// tools that move the map are browser state and the analysis they call is the same TypeScript the
+// panel uses — a second implementation here would be free to disagree with what the reader sees.
+//
+// The one rule that keeps this a proxy rather than an open relay: `messages` is the ONLY thing
+// accepted from the caller. Everything else is pinned below. Anything reaching this endpoint can
+// spend the operator's money, so the allowlist is not a formality.
+
+/**
+ * Where to send chat requests.
+ *
+ * `ANTHROPIC_BASE_URL` is a convention the Anthropic SDKs and CLI already use, and it holds a
+ * **base**, not an endpoint — someone with it exported for other tooling would otherwise silently
+ * have this server POST to the API root and get a bodyless 404 back. So the path is appended here,
+ * and a value that already carries it is left alone.
+ *
+ * Read from this server's own environment, never from a request: a client-supplied endpoint would
+ * be a way to redirect the operator's key somewhere else.
+ */
+function messagesUrl(base) {
+  if (!base) return 'https://api.anthropic.com/v1/messages'
+  const trimmed = base.replace(/\/+$/, '')
+  return trimmed.endsWith('/v1/messages') ? trimmed : `${trimmed}/v1/messages`
+}
+
+const ANTHROPIC_URL = messagesUrl(process.env.ANTHROPIC_BASE_URL)
+const ANTHROPIC_VERSION = '2023-06-01'
+
+/** Pinned. The only model this server ever names — cost is why it is a Sonnet. */
+const CHAT_MODEL = 'claude-sonnet-5'
+/** A ceiling, not a spend: only generated tokens are billed. Sized so adaptive thinking cannot eat
+ *  the whole budget and leave a truncated answer, which is billed in full and has to be retried. */
+const CHAT_MAX_TOKENS = 16_384
+const CHAT_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max']
+const CHAT_EFFORT = CHAT_EFFORTS.includes(process.env.CHAT_EFFORT ?? '')
+  ? process.env.CHAT_EFFORT
+  : 'medium'
+/** A twelve-turn conversation with capped tool results runs 60-100 KB of JSON. */
+const CHAT_MAX_BODY = 256 * 1024
+const CHAT_MAX_MESSAGES = 60
+// There is deliberately NO minimum gap between chat requests, unlike POST /api/run's cooldown.
+// The tool loop is a chain of requests within one answer, and because every tool reads data the
+// browser already has, the next request follows in single-digit milliseconds. A 500ms gate looked
+// harmless and broke every question that needed a tool — which is nearly all of them. Concurrency
+// is already bounded by `chatBusy`, and spend by the hourly cap; a gap timer adds nothing but a
+// way to fail.
+const CHAT_MAX_PER_HOUR = 120
+/** The guard, not a preference. The client has its own cap; only this one cannot be edited away. */
+const CHAT_MAX_TOOL_TURNS = 12
+const CHAT_BLOCK_TYPES = new Set(['text', 'tool_use', 'tool_result', 'thinking'])
+
+/** Chat is serialised like runs are, which also caps how fast the key can be spent. */
+let chatBusy = false
+/** Rolling hour of request timestamps. A runaway loop is the real cost risk here. */
+let chatRecent = []
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -62,6 +152,106 @@ let current = {
   exitCode: null,
   lines: [],
   trigger: null,
+}
+
+/**
+ * Read a JSON request body.
+ *
+ * The first body reader in this project — every other endpoint takes what it needs from the query
+ * string. The size cap is checked twice on purpose: once against the declared content-length, which
+ * is cheap, and again against what actually arrives, because the header is the caller's claim and
+ * not a fact.
+ */
+async function readJson(req, limit) {
+  const type = req.headers['content-type'] ?? ''
+  if (!type.startsWith('application/json')) {
+    throw Object.assign(new Error('expected content-type: application/json'), { code: 415 })
+  }
+  const declared = Number(req.headers['content-length'] ?? 0)
+  if (declared > limit) {
+    throw Object.assign(new Error(`request body over ${Math.floor(limit / 1024)} KB`), { code: 413 })
+  }
+  req.setTimeout(10_000)
+  let size = 0
+  const chunks = []
+  for await (const chunk of req) {
+    size += chunk.length
+    // Stop reading rather than politely draining a body that is already too big.
+    if (size > limit) {
+      req.destroy()
+      throw Object.assign(new Error(`request body over ${Math.floor(limit / 1024)} KB`), { code: 413 })
+    }
+    chunks.push(chunk)
+  }
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString('utf8'))
+  } catch {
+    throw Object.assign(new Error('body is not valid JSON'), { code: 400 })
+  }
+}
+
+/**
+ * Refuse a cross-origin request.
+ *
+ * There are deliberately no CORS headers anywhere in this file, and there must never be: an
+ * `Access-Control-Allow-Origin` on an endpoint that carries an API key is the single most damaging
+ * line anyone could add here. This is the other half — a same-origin check for requests that carry
+ * an Origin at all. It also closes a real hole on POST /api/run, which a cross-site form could
+ * otherwise trigger without a preflight.
+ */
+function crossOrigin(req) {
+  const origin = req.headers.origin
+  if (!origin) return false
+  try {
+    return new URL(origin).host !== req.headers.host
+  } catch {
+    return true
+  }
+}
+
+/**
+ * Validate the one thing the client is allowed to send.
+ *
+ * Returns the messages array or throws. `role: 'system'` is rejected rather than passed through:
+ * Sonnet 5 does not accept mid-conversation system messages anyway, but on a model that did they
+ * would be an operator-authority channel open to anything that can reach this port.
+ */
+function validateMessages(body) {
+  const keys = Object.keys(body ?? {})
+  const extra = keys.filter((k) => k !== 'messages')
+  if (extra.length) {
+    throw Object.assign(new Error(`only 'messages' is accepted; got ${extra.join(', ')}`), { code: 400 })
+  }
+  const messages = body?.messages
+  if (!Array.isArray(messages) || !messages.length || messages.length > CHAT_MAX_MESSAGES) {
+    throw Object.assign(new Error(`messages must be an array of 1-${CHAT_MAX_MESSAGES} entries`), { code: 400 })
+  }
+  let toolTurns = 0
+  for (const m of messages) {
+    if (!m || typeof m !== 'object') throw Object.assign(new Error('each message must be an object'), { code: 400 })
+    if (m.role !== 'user' && m.role !== 'assistant') {
+      throw Object.assign(new Error(`message role must be user or assistant; got ${JSON.stringify(m.role)}`), { code: 400 })
+    }
+    if (typeof m.content === 'string') continue
+    if (!Array.isArray(m.content)) {
+      throw Object.assign(new Error('message content must be a string or an array of blocks'), { code: 400 })
+    }
+    let onlyToolResults = m.content.length > 0
+    for (const b of m.content) {
+      if (!b || !CHAT_BLOCK_TYPES.has(b.type)) {
+        throw Object.assign(new Error(`unsupported content block ${JSON.stringify(b?.type)}`), { code: 400 })
+      }
+      // A caller could otherwise pin an hour-long cache entry on every block.
+      delete b.cache_control
+      if (b.type !== 'tool_result') onlyToolResults = false
+    }
+    // A user turn made only of tool results is the loop talking to itself, not a person.
+    if (m.role === 'user') toolTurns = onlyToolResults ? toolTurns + 1 : 0
+  }
+  if (toolTurns > CHAT_MAX_TOOL_TURNS) {
+    throw Object.assign(new Error(`tool loop too long (over ${CHAT_MAX_TOOL_TURNS} turns)`), { code: 400 })
+  }
+  return messages
 }
 
 function json(res, code, body) {
@@ -194,7 +384,10 @@ const server = createServer(async (req, res) => {
         runner: status?.run?.runner ?? null,
         criticalAlerts: critical,
       },
-      running: current.state === 'running',
+      running: current.running,
+      // Reported, never a fault. The assistant is optional; a viewer with no key is a healthy
+      // viewer, and a 503 here would devalue the one signal worth alerting on externally.
+      chat: { configured: Boolean(process.env.ANTHROPIC_API_KEY), model: CHAT_MODEL },
       faults,
       siteDir: SITE_DIR,
       publishDir: process.env.PUBLISH_DIR ?? null,
@@ -214,6 +407,8 @@ const server = createServer(async (req, res) => {
   }
 
   if (path === '/api/run' && req.method === 'POST') {
+    // A cross-site form POST is a simple request: no preflight, and it would start a pipeline.
+    if (crossOrigin(req)) return json(res, 403, { error: 'cross-origin request refused' })
     if (current.running) {
       // Not an error the user needs to fix — just say what is already happening.
       return json(res, 409, { error: 'a run is already in progress', run: current })
@@ -229,6 +424,152 @@ const server = createServer(async (req, res) => {
     return json(res, 202, startRun(force ? ['--force'] : [], 'web'))
   }
 
+  // The assistant's capability probe. Reports whether a key is configured — never the key, nor a
+  // prefix, a length or a hash of it. This rides its own path rather than a field on /api/health
+  // because it is the one path the dev server proxies.
+  if (path === '/api/chat' && req.method === 'GET') {
+    return json(res, 200, {
+      available: true,
+      configured: Boolean(process.env.ANTHROPIC_API_KEY),
+      model: CHAT_MODEL,
+      effort: CHAT_EFFORT,
+      maxToolTurns: CHAT_MAX_TOOL_TURNS,
+      maxBodyBytes: CHAT_MAX_BODY,
+    })
+  }
+
+  if (path === '/api/chat' && req.method === 'POST') {
+    if (crossOrigin(req)) return json(res, 403, { error: 'cross-origin request refused' })
+
+    const key = process.env.ANTHROPIC_API_KEY
+    if (!key) {
+      return json(res, 503, {
+        error: 'the assistant is not configured on this server (ANTHROPIC_API_KEY is not set)',
+      })
+    }
+    if (chatBusy) return json(res, 409, { error: 'a chat request is already in progress' })
+
+    const now = Date.now()
+    chatRecent = chatRecent.filter((t) => now - t < 3_600_000)
+    if (chatRecent.length >= CHAT_MAX_PER_HOUR) {
+      res.setHeader('retry-after', '600')
+      return json(res, 429, {
+        error: `hourly cap of ${CHAT_MAX_PER_HOUR} chat requests reached`,
+        retryAfterSeconds: 600,
+      })
+    }
+
+    let messages
+    try {
+      messages = validateMessages(await readJson(req, CHAT_MAX_BODY))
+    } catch (err) {
+      return json(res, err.code ?? 400, { error: err.message })
+    }
+
+    // Read per request rather than at startup, so editing the prompt needs no restart — the same
+    // reason /api/health re-reads the status file every time.
+    let system, tools
+    try {
+      system = await readFile(join(ROOT, 'src', 'chat', 'system.md'), 'utf8')
+      tools = JSON.parse(await readFile(join(ROOT, 'src', 'chat', 'tools.json'), 'utf8'))
+      if (Array.isArray(tools.tools)) tools = tools.tools
+    } catch (err) {
+      return json(res, 500, { error: `assistant prompt or tools missing: ${err.message}` })
+    }
+
+    chatBusy = true
+    chatRecent.push(now)
+
+    const controller = new AbortController()
+    // Without this, closing the tab leaves the upstream request running and billing.
+    req.on('close', () => controller.abort())
+    // Time to first byte only. Replaced by an idle watchdog below, because a whole-request timeout
+    // would kill a legitimately long answer in the middle of streaming it.
+    let timer = setTimeout(() => controller.abort(), 30_000)
+
+    try {
+      const upstream = await fetch(ANTHROPIC_URL, {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': key,
+          'anthropic-version': ANTHROPIC_VERSION,
+          'anthropic-beta': 'task-budgets-2026-03-13',
+          'user-agent': 'myanmar-flood-viewer/1.0 (panel assistant)',
+        },
+        body: JSON.stringify({
+          model: CHAT_MODEL,
+          max_tokens: CHAT_MAX_TOKENS,
+          stream: true,
+          // display:'summarized' is deliberate — the default omits the text, which reads as a long
+          // silent pause in a streaming UI.
+          thinking: { type: 'adaptive', display: 'summarized' },
+          output_config: {
+            effort: CHAT_EFFORT,
+            // Advisory, unlike max_tokens: the model sees a countdown and finishes gracefully
+            // rather than being cut off.
+            task_budget: { type: 'tokens', total: 20_000 },
+          },
+          system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
+          tools,
+          messages,
+        }),
+      })
+
+      if (!upstream.ok) {
+        const detail = await upstream.text().catch(() => '')
+        let message = detail.slice(0, 500)
+        try {
+          message = JSON.parse(detail)?.error?.message ?? message
+        } catch {
+          /* not JSON; the raw text is more use than nothing */
+        }
+        const retryAfter = upstream.headers.get('retry-after')
+        if (retryAfter) res.setHeader('retry-after', retryAfter)
+        // Loopback, and the reader is the operator paying the bill — "your key is out of credit"
+        // is exactly what they need to see.
+        return json(res, upstream.status, { error: message })
+      }
+
+      // The first streaming response in this codebase. No content-length, so it cannot use json().
+      res.writeHead(200, {
+        'content-type': 'text/event-stream; charset=utf-8',
+        'cache-control': 'no-store',
+        connection: 'keep-alive',
+        // nginx buffers by default, which would deliver the whole stream at once and reproduce the
+        // exact problem streaming was added to solve.
+        'x-accel-buffering': 'no',
+      })
+      res.flushHeaders()
+
+      clearTimeout(timer)
+      // Idle watchdog: refreshed per chunk, so a long answer survives but a dead connection does not.
+      timer = setTimeout(() => controller.abort(), 60_000)
+
+      // Passed through verbatim. This server does not parse Anthropic's event vocabulary, for the
+      // same reason it does not parse the pipeline's [[stage]] markers: the client owns semantics.
+      for await (const chunk of upstream.body) {
+        res.write(chunk)
+        timer.refresh()
+      }
+      return res.end()
+    } catch (err) {
+      const message = controller.signal.aborted ? 'the assistant timed out' : err.message
+      // Once the stream has begun the status is already sent and cannot be changed. The client
+      // treats a stream that ends without message_stop as a failure — an answer that stops early
+      // must never look finished.
+      if (res.headersSent) {
+        res.write(`event: error\ndata: ${JSON.stringify({ error: message })}\n\n`)
+        return res.end()
+      }
+      return json(res, 504, { error: message })
+    } finally {
+      clearTimeout(timer)
+      chatBusy = false
+    }
+  }
+
   if (path.startsWith('/api/')) return json(res, 404, { error: 'unknown endpoint' })
 
   return serveStatic(req, res, path)
@@ -239,8 +580,19 @@ server.listen(PORT, HOST, () => {
   console.log(`  serving     ${SITE_DIR}`)
   console.log(`  status      ${STATUS_FILE}`)
   console.log(`  publish dir ${process.env.PUBLISH_DIR ?? '(not set — POST /api/run will not publish)'}`)
+  console.log(
+    `  assistant   ${process.env.ANTHROPIC_API_KEY ? `${CHAT_MODEL}, effort ${CHAT_EFFORT}` : '(disabled — ANTHROPIC_API_KEY not set)'}`,
+  )
+  if (process.env.ANTHROPIC_API_KEY && ANTHROPIC_URL !== 'https://api.anthropic.com/v1/messages') {
+    console.log(`  endpoint    ${ANTHROPIC_URL}  (from ANTHROPIC_BASE_URL)`)
+  }
   if (HOST !== '127.0.0.1' && HOST !== 'localhost') {
-    console.log('\n  WARNING: bound beyond localhost. POST /api/run executes a pipeline on this')
-    console.log('  machine and has no authentication. Put a reverse proxy with auth in front of it.')
+    console.log('\n  WARNING: bound beyond localhost, with no authentication on either endpoint that')
+    console.log('  matters. POST /api/run executes a pipeline on this machine.')
+    if (process.env.ANTHROPIC_API_KEY) {
+      console.log('  POST /api/chat spends your Anthropic API key — anything that can reach this port')
+      console.log('  can run up a bill against it.')
+    }
+    console.log('  Put a reverse proxy with auth in front of it.')
   }
 })

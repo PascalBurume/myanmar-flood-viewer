@@ -23,6 +23,10 @@ export interface Stat {
    * something says otherwise — and on a flood map that is a real way to mislead.
    */
   unverified?: boolean
+  /** For a figure that is a tally rather than a rate: 16 of 30 records, not a modelled 53.3%.
+   *  Present on the supplied flood-risk shares, and the reason they are marked unverified. */
+  count?: number
+  denominator?: number
 }
 
 export interface Dataset {
@@ -53,6 +57,11 @@ export interface DataIndex {
   updated: string
   source: string
   datasets: Dataset[]
+  /** Written by the converter, not by hand. Carried through because it is the plainest statement of
+   *  what this data is and is not, and anything quoting the data should be able to repeat it. */
+  note?: string
+  converted?: string
+  adamEvent?: string
 }
 
 /**

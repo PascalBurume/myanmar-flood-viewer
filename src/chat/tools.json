@@ -1,0 +1,636 @@
+{
+  "$comment": "Tool schemas for the panel assistant. FILE ORDER IS LOAD-BEARING: tools are rendered before the system prompt and the conversation, so reordering them invalidates the cached prefix and silently costs a full re-cache on every request. Append; do not rearrange. The API allows at most 20 strict tools, so `strict` is set only on tools that actually take input — on a no-argument tool it constrains nothing and would just consume one of the 20. Where it is set, every property is listed in `required` — strict mode expects that, and it also removes a decision the model would otherwise have to make. `strict` guarantees the shape, not sane values, so each handler validates its input again.",
+  "tools": [
+    {
+      "name": "list_datasets",
+      "description": "What data this viewer holds: each dataset's name, the note describing what it is and is not, its layers and feature counts, its bounding box, and its statistics. Call this first when you do not know which dataset can answer a question. The notes are the authoritative description of each dataset's limits — quote them rather than paraphrasing.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "national_totals",
+      "description": "Nationwide totals across every township where flood water was detected: people exposed, flooded area, flooded cropland, and how many townships were observed. Use for 'how many people', 'how bad is it overall'. Returns the observation date and service id needed to cite the figure.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "rank_places",
+      "description": "The worst-affected places, ranked. Grouped by region by default, because a township ranking buries the shape of an event. Use for any 'which places', 'top N', 'worst hit' question. Region coordinates are weighted by impact, so they point at where the water is rather than the region's geometric centre.",
+      "strict": true,
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "measure": {
+            "type": "string",
+            "enum": [
+              "people",
+              "flooded",
+              "cropland"
+            ],
+            "description": "What to rank by. Use people unless asked otherwise."
+          },
+          "groupBy": {
+            "type": "string",
+            "enum": [
+              "region",
+              "township"
+            ],
+            "description": "Use region unless the question is specifically about townships."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Rows to return. 15 is a sensible default; use 5 for a short answer. Range 1–50."
+          }
+        },
+        "required": [
+          "measure",
+          "groupBy",
+          "limit"
+        ]
+      }
+    },
+    {
+      "name": "lookup_place",
+      "description": "Find a named township, district or region in the exposure data and return its figures. Use whenever the reader names a place. An empty result means the place was not in this observation — it does NOT mean the place was dry, and you must say so.",
+      "strict": true,
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Place name to search for, matched against township, district and region."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Maximum matches. 5 is usually right. Range 1–20."
+          }
+        },
+        "required": [
+          "query",
+          "limit"
+        ]
+      }
+    },
+    {
+      "name": "flood_history",
+      "description": "The multi-year record of satellite passes: 142 single-day observations from 2022 to now, each with people exposed, flooded area, flooded cropland and the area actually observed. Use for 'has this happened before', 'when was it worse', or any request for the series itself. Observations whose population was withheld come back as null and must never be treated as zero.",
+      "strict": true,
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "from": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Earliest date, YYYY-MM-DD, or null for no lower bound."
+          },
+          "to": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Latest date, YYYY-MM-DD, or null for no upper bound."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Most recent N observations in the range. Keep this small; 24 is usually plenty. Range 1–60."
+          },
+          "order": {
+            "type": "string",
+            "enum": [
+              "date",
+              "value"
+            ],
+            "description": "date for a time series, value to find the largest."
+          },
+          "metric": {
+            "type": "string",
+            "enum": [
+              "people",
+              "flooded",
+              "cropland",
+              "observed"
+            ],
+            "description": "Which measure to order by when order is value."
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "limit",
+          "order",
+          "metric"
+        ]
+      }
+    },
+    {
+      "name": "history_stats",
+      "description": "Summary of the historical record for one measure: latest pass, the one before it, the change between them, the all-time peak, how many passes there were and how many had their population withheld. Use for 'is it getting worse', 'how does this compare'. Reports the gap in days before the comparison pass, so you can name the date rather than saying 'the previous pass' across a hole in the archive.",
+      "strict": true,
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "metric": {
+            "type": "string",
+            "enum": [
+              "people",
+              "flooded"
+            ],
+            "description": "Which measure to summarise."
+          },
+          "windowDays": {
+            "type": "integer",
+            "enum": [
+              0,
+              365,
+              1095
+            ],
+            "description": "0 for the whole record, 365 for the last year, 1095 for three years."
+          }
+        },
+        "required": [
+          "metric",
+          "windowDays"
+        ]
+      }
+    },
+    {
+      "name": "weather_forecast",
+      "description": "River discharge and rainfall, past and forecast. THE ONLY FORECAST IN THIS VIEWER — everything else already happened. River discharge is the more useful of the two for flooding, because it integrates rain that fell days ago hundreds of kilometres upstream. Every forward-dated day is flagged isForecast and must be described as a forecast.",
+      "strict": true,
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "rivers",
+              "rain"
+            ],
+            "description": "rivers for discharge at gauges, rain for rainfall at regions. Prefer rivers."
+          },
+          "place": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Name of a gauge or region to filter to, or null for all of them."
+          }
+        },
+        "required": [
+          "kind",
+          "place"
+        ]
+      }
+    },
+    {
+      "name": "pipeline_status",
+      "description": "Whether the data is current, when the pipeline last ran, what each source reported, and any active alerts. MUST be called before making any claim about how up to date the data is — the freshness verdict is computed here and must be repeated, never inferred from a timestamp yourself.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "layer_reference",
+      "description": "What each map layer actually shows, in the project's own words, plus whether it is currently visible and at what opacity. Call this before explaining a layer or before turning one on, so the description you give matches the one in the panel.",
+      "strict": true,
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "all",
+              "waterextent",
+              "floodextentearly",
+              "floodextent",
+              "inputarea",
+              "exposure"
+            ],
+            "description": "One layer kind, or \"all\" for every one of them."
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      }
+    },
+    {
+      "name": "set_layer_visibility",
+      "description": "Show or hide a map layer. Say what you changed.",
+      "strict": true,
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "waterextent",
+              "floodextentearly",
+              "floodextent",
+              "inputarea",
+              "exposure"
+            ]
+          },
+          "visible": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "kind",
+          "visible"
+        ]
+      }
+    },
+    {
+      "name": "set_layer_opacity",
+      "description": "Set a layer's opacity, 0 to 1.",
+      "strict": true,
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "waterextent",
+              "floodextentearly",
+              "floodextent",
+              "inputarea",
+              "exposure"
+            ]
+          },
+          "opacity": {
+            "type": "number",
+            "description": "Range 0–1."
+          }
+        },
+        "required": [
+          "kind",
+          "opacity"
+        ]
+      }
+    },
+    {
+      "name": "set_dataset_visibility",
+      "description": "Show or hide one dataset's layers. Dataset ids come from list_datasets.",
+      "strict": true,
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "datasetId": {
+            "type": "string"
+          },
+          "visible": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "datasetId",
+          "visible"
+        ]
+      }
+    },
+    {
+      "name": "zoom_to_place",
+      "description": "Move the map to a named place from the exposure data. Give the name, not coordinates — the name is resolved against the same data the ranking uses, so the map lands on the impact rather than on a guess.",
+      "strict": true,
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "placeName": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "placeName"
+        ]
+      }
+    },
+    {
+      "name": "zoom_to_dataset",
+      "description": "Fit the map to one dataset's bounding box.",
+      "strict": true,
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "datasetId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "datasetId"
+        ]
+      }
+    },
+    {
+      "name": "fit_all",
+      "description": "Zoom out to show every dataset at once.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "set_basemap",
+      "description": "Switch the base map. 'osm' is the street map, 'satellite' is VIIRS true colour, 'flood721' is the false-colour flood combination where water reads near-black and cloud reads cyan, 'cloudfree' is a cloudless yearly mosaic with no date, 'blank' is nothing. Optical imagery is often solid cloud during monsoon flooding; that is expected, and it is why the detection underneath is radar.",
+      "strict": true,
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "basemap": {
+            "type": "string",
+            "enum": [
+              "osm",
+              "satellite",
+              "flood721",
+              "cloudfree",
+              "blank"
+            ]
+          },
+          "imageryDate": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "YYYY-MM-DD for the dated imagery basemaps, or null to leave the date alone. Cannot be in the future."
+          }
+        },
+        "required": [
+          "basemap",
+          "imageryDate"
+        ]
+      }
+    },
+    {
+      "name": "set_rain_overlay",
+      "description": "Show or hide measured rainfall (GPM IMERG) over whichever basemap is showing. This is measured rain that already fell, not a forecast. Its date is separate from the imagery date and lags about two days.",
+      "strict": true,
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "on": {
+            "type": "boolean"
+          },
+          "date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "YYYY-MM-DD, or null to keep the current date."
+          },
+          "opacity": {
+            "type": "number",
+            "description": "Range 0.1–1."
+          }
+        },
+        "required": [
+          "on",
+          "date",
+          "opacity"
+        ]
+      }
+    },
+    {
+      "name": "show_chart",
+      "description": "Draw a small chart in the conversation. Use when comparing more than three things, and always state the headline number in prose as well — the chart supports the answer, it does not replace it. Every chart must name its dataset and observation date in `source`. Use bars for a ranking and series for values over time; in a series, set withheld:true with value:null for an observation whose figure was withheld, so it draws hollow instead of as zero.",
+      "strict": true,
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "chart": {
+            "type": "string",
+            "enum": [
+              "bars",
+              "series"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "people",
+              "km2",
+              "mm",
+              "m3s",
+              "count",
+              "percent"
+            ]
+          },
+          "source": {
+            "type": "string",
+            "description": "Dataset and observation date, e.g. 'UNOSAT FloodAI AI20260814MMR, observed 2026-08-08'."
+          },
+          "caveat": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The one limitation a reader must know to read this chart correctly, or null."
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "label": {
+                  "type": "string"
+                },
+                "sub": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "value": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "withheld": {
+                  "type": "boolean"
+                },
+                "lon": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "lat": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "label",
+                "sub",
+                "value",
+                "withheld",
+                "lon",
+                "lat"
+              ]
+            }
+          }
+        },
+        "required": [
+          "chart",
+          "title",
+          "unit",
+          "source",
+          "caveat",
+          "rows"
+        ]
+      }
+    },
+    {
+      "name": "request_pipeline_run",
+      "description": "Ask the reader whether to fetch fresh data. This RUNS NOTHING — it puts a button in front of them and they decide. Use it only when pipeline_status says the data is stale and the question depends on current figures. A run takes about 40 seconds and makes live calls to third-party services.",
+      "strict": true,
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "type": "string",
+            "description": "One sentence the reader will see, saying why this is worth doing now."
+          }
+        },
+        "required": [
+          "reason"
+        ]
+      }
+    },
+    {
+      "name": "check_run_state",
+      "description": "Whether a pipeline run is in progress right now and which stage it has reached.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "inspect_map",
+      "description": "What the map is showing RIGHT NOW: the visible area, which townships fall inside it and their figures, which hand-traced flood extents are drawn there and on what date they were imaged, and which layers are switched off. Use this whenever the reader says 'here', 'this area', 'what I'm looking at', or asks about something visible on screen. The township figures are exact; the traced extents are read from what is drawn, so their absence proves nothing.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "query_location",
+      "description": "USE THIS FIRST whenever the question arrives with coordinates attached — the reader has clicked that spot and is asking about it, not about the whole view. What the map draws at one specific spot — the same thing a reader gets by clicking there. Returns which flood or water layers cover the point, the satellite and date that imaged them, whether any hand-traced extent covers the point at all, and the nearest township with detected water. Give either placeName, or lon and lat. IMPORTANT: the point must be on screen; if it is not, zoom to it first and ask again rather than reporting nothing found.",
+      "strict": true,
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "placeName": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A township, district or region name to resolve to coordinates, or null if giving lon/lat."
+          },
+          "lon": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Longitude, or null if giving placeName."
+          },
+          "lat": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Latitude, or null if giving placeName."
+          }
+        },
+        "required": [
+          "placeName",
+          "lon",
+          "lat"
+        ]
+      }
+    },
+    {
+      "name": "compare_places",
+      "description": "Set ONE place against the worst-hit, in a single ranking that always contains it. USE THIS for any question of the form 'how does here compare', 'compare this with the most affected', 'is this bad relative to elsewhere'. Do NOT use rank_places for a comparison — it returns only the top few and will silently leave the reader's own place out of the answer. Returns the subject's exact rank, how many times smaller it is than the worst, its share of the national total, and draws a chart with the subject highlighted.",
+      "strict": true,
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "subject": {
+            "type": "string",
+            "description": "The place to compare — a region, or a township name (which will be resolved to its region when comparing regions)."
+          },
+          "measure": {
+            "type": "string",
+            "enum": [
+              "people",
+              "flooded",
+              "cropland"
+            ],
+            "description": "What to compare by. Use people unless asked otherwise."
+          },
+          "groupBy": {
+            "type": "string",
+            "enum": [
+              "region",
+              "township"
+            ],
+            "description": "Compare against regions or against townships."
+          },
+          "topN": {
+            "type": "integer",
+            "description": "How many of the worst to show alongside. 5 is usually right. Range 1-15."
+          }
+        },
+        "required": [
+          "subject",
+          "measure",
+          "groupBy",
+          "topN"
+        ]
+      }
+    }
+  ]
+}

@@ -46,6 +46,9 @@ export interface Alert {
   source?: string
   date?: string
   people?: number
+  /** What the surge was judged against — the median of the preceding passes, not a fixed number.
+   *  Carried so the comparison can be shown rather than just the verdict. */
+  baseline?: number
 }
 
 export interface AlertBlock {
@@ -59,10 +62,13 @@ export interface StatusDoc {
   schema: number
   generatedAt: string
   run: {
-    id: string | null
-    number: string | null
+    // Optional, not `| null`: these are absent entirely from a locally-produced status.json, which
+    // is now every status.json. Typing them as required made the contract claim something the file
+    // has never contained.
+    id?: string | null
+    number?: string | null
     /** Only set when the runner was GitHub Actions; a link, never the source of truth. */
-    url: string | null
+    url?: string | null
     trigger: string
     /** 'github-actions' or 'local:<host>' — which machine produced this. */
     runner?: string

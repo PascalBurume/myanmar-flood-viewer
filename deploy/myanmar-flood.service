@@ -15,6 +15,18 @@ Environment=PORT=5180
 Environment=HOST=127.0.0.1
 Environment=PUBLISH_DIR=/var/www/flood
 Environment=SITE_DIR=/var/www/flood
+# The panel assistant's API key, if you want that feature. Optional — without it the assistant tab
+# says it is not configured and everything else works unchanged.
+#
+# A key must NOT go in an Environment= line: unit files are world-readable and `systemctl cat`
+# prints them. Put it in a file owned by the service user, mode 0600:
+#
+#   sudo install -d -m 0750 /etc/myanmar-flood
+#   printf 'ANTHROPIC_API_KEY=sk-ant-...\n' | sudo tee /etc/myanmar-flood/chat.env >/dev/null
+#   sudo chmod 0600 /etc/myanmar-flood/chat.env
+#
+# The leading `-` means the unit still starts when the file is absent.
+EnvironmentFile=-/etc/myanmar-flood/chat.env
 ExecStart=/usr/bin/node server/index.mjs
 Restart=on-failure
 RestartSec=5

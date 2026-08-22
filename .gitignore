@@ -2,3 +2,9 @@ node_modules/
 dist/
 .DS_Store
 *.local
+
+# Never commit an API key. `*.local` does not cover these.
+.env
+.env.*
+# ...but the blank template is the thing that tells anyone how to set one up, so it must ship.
+!.env.example

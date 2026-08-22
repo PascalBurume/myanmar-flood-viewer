@@ -6,7 +6,9 @@
   "license": "MIT",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "node scripts/check_chat_tools.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check_grounding.mjs && tsc --noEmit && vite build",
+    "check:tools": "node scripts/check_chat_tools.mjs",
+    "check:grounding": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check_grounding.mjs",
     "preview": "vite preview",
     "pipeline": "python3 scripts/run_pipeline.py",
     "pipeline:publish": "python3 scripts/run_pipeline.py --publish \"${PUBLISH_DIR:?set PUBLISH_DIR to your web root}\"",

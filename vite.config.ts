@@ -17,6 +17,16 @@ export default defineConfig(() => ({
   server: {
     port: 5175,
     strictPort: true,
+    // Deliberately just /api/chat, and not /api.
+    //
+    // The assistant is the one feature that cannot degrade gracefully without a server — it has
+    // nowhere to send a message — so it gets a proxy. Everything else under /api must keep 404ing
+    // here, because `checkServer()` tests `status !== 404` to decide whether a server exists. Vite
+    // answers a proxy ECONNREFUSED with 500, so proxying all of /api would make a *stopped* server
+    // look present, put the "Run update now" button back on screen, and have it fail when clicked.
+    proxy: {
+      '/api/chat': { target: 'http://127.0.0.1:5180', changeOrigin: false },
+    },
     // When WSL watches files on the Windows side (/mnt/c), inotify events never arrive, so the
     // dev server keeps serving stale output after an edit. Fall back to polling.
     watch: {

@@ -11,6 +11,13 @@ export interface Place {
   cropland: number
   lon: number
   lat: number
+  /**
+   * The date UNOSAT actually observed this township. Carried per-feature rather than taken from the
+   * dataset as a whole because a single product stitches together several passes, so two townships
+   * in one file can have been looked at on different days. Any figure quoted from this row has to
+   * be able to name it.
+   */
+  observed: string
 }
 
 /**
@@ -49,6 +56,7 @@ export function useExposure(index: DataIndex, base: string): Place[] {
             cropland: Number(f.properties['Flooded cropland (km²)'] ?? 0),
             lon: f.geometry.coordinates[0],
             lat: f.geometry.coordinates[1],
+            observed: String(f.properties.Observed ?? ''),
           })),
         )
       } catch {
@@ -61,6 +69,19 @@ export function useExposure(index: DataIndex, base: string): Place[] {
   }, [path, base, index.updated])
 
   return places
+}
+
+/**
+ * When these figures were observed.
+ *
+ * Read from the rows themselves rather than from a dataset-level field, because one UNOSAT product
+ * stitches together several passes and two townships in the same file can have been looked at on
+ * different days — so the honest answer is sometimes a range, not a date.
+ */
+export function observedRange(places: Place[]): string | null {
+  const dates = [...new Set(places.map((p) => p.observed).filter(Boolean))].sort()
+  if (!dates.length) return null
+  return dates.length === 1 ? dates[0] : `${dates[0]} to ${dates.at(-1)}`
 }
 
 /** National totals, derived rather than stored, so they can never disagree with the rows. */
@@ -76,7 +97,86 @@ export function nationalTotals(places: Place[]) {
   )
 }
 
-type Measure = 'people' | 'flooded' | 'cropland'
+export type Measure = 'people' | 'flooded' | 'cropland'
+
+export interface RankedRow {
+  key: string
+  name: string
+  sub: string
+  value: number
+  lon: number
+  lat: number
+}
+
+/**
+ * The worst-affected places, ranked.
+ *
+ * Lifted out of the panel's render body so the assistant can call it too. That is the whole point:
+ * two rankings computed two ways would eventually disagree about "worst affected", and the reader
+ * would have no way to tell which one to believe.
+ */
+export function rankPlaces(
+  places: Place[],
+  { measure = 'people', groupBy = 'region', limit = 15 }: {
+    measure?: Measure
+    groupBy?: 'township' | 'region'
+    limit?: number
+  } = {},
+): RankedRow[] {
+  if (groupBy === 'township') {
+    return [...places]
+      .sort((a, b) => b[measure] - a[measure])
+      .slice(0, limit)
+      .map((p) => ({
+        key: `${p.region}/${p.township}`,
+        name: p.township || p.district,
+        sub: p.region,
+        value: p[measure],
+        lon: p.lon,
+        lat: p.lat,
+      }))
+  }
+  const agg = new Map<string, { value: number; lon: number; lat: number; n: number; w: number }>()
+  for (const p of places) {
+    const cur = agg.get(p.region) ?? { value: 0, lon: 0, lat: 0, n: 0, w: 0 }
+    cur.value += p[measure]
+    cur.n += 1
+    // Centre weighted by the measure, so "zoom to region" lands on where the impact actually is
+    // rather than on the region's geometric middle.
+    const w = Math.max(p[measure], 0.0001)
+    cur.lon += p.lon * w
+    cur.lat += p.lat * w
+    cur.w += w
+    agg.set(p.region, cur)
+  }
+  return [...agg.entries()]
+    .map(([name, v]) => ({
+      key: name,
+      name,
+      sub: `${v.n} township${v.n === 1 ? '' : 's'}`,
+      value: v.value,
+      lon: v.lon / v.w,
+      lat: v.lat / v.w,
+    }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, limit)
+}
+
+/**
+ * Find places by name, across township, district and region.
+ *
+ * Only townships where water was actually detected appear in this file at all, so an empty result
+ * means "not in this observation" and never "dry" — callers have to say which.
+ */
+export function findPlaces(places: Place[], query: string, limit = 5): Place[] {
+  const q = query.trim().toLowerCase()
+  if (!q) return []
+  const hit = (p: Place) =>
+    p.township.toLowerCase().includes(q) ||
+    p.district.toLowerCase().includes(q) ||
+    p.region.toLowerCase().includes(q)
+  return places.filter(hit).sort((a, b) => b.people - a.people).slice(0, limit)
+}
 
 const MEASURES: { key: Measure; label: string; short: string; fmt: (n: number) => string }[] = [
   { key: 'people', label: 'People exposed', short: 'People', fmt: (n) => n.toLocaleString() },
@@ -99,48 +199,14 @@ export function TopAffected({
   const [measure, setMeasure] = useState<Measure>('people')
   const [byRegion, setByRegion] = useState(true)
 
-  const rows = useMemo(() => {
-    if (!byRegion) {
-      return [...places]
-        .sort((a, b) => b[measure] - a[measure])
-        .slice(0, 15)
-        .map((p) => ({
-          key: `${p.region}/${p.township}`,
-          name: p.township || p.district,
-          sub: p.region,
-          value: p[measure],
-          lon: p.lon,
-          lat: p.lat,
-        }))
-    }
-    const agg = new Map<string, { value: number; lon: number; lat: number; n: number; w: number }>()
-    for (const p of places) {
-      const cur = agg.get(p.region) ?? { value: 0, lon: 0, lat: 0, n: 0, w: 0 }
-      cur.value += p[measure]
-      cur.n += 1
-      // Centre weighted by the measure, so "zoom to region" lands on where the impact actually is
-      // rather than on the region's geometric middle.
-      const w = Math.max(p[measure], 0.0001)
-      cur.lon += p.lon * w
-      cur.lat += p.lat * w
-      cur.w += w
-      agg.set(p.region, cur)
-    }
-    return [...agg.entries()]
-      .map(([name, v]) => ({
-        key: name,
-        name,
-        sub: `${v.n} township${v.n === 1 ? '' : 's'}`,
-        value: v.value,
-        lon: v.lon / v.w,
-        lat: v.lat / v.w,
-      }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 15)
-  }, [places, measure, byRegion])
+  const rows = useMemo(
+    () => rankPlaces(places, { measure, groupBy: byRegion ? 'region' : 'township', limit: 15 }),
+    [places, measure, byRegion],
+  )
 
   if (!places.length) return null
   const max = Math.max(...rows.map((r) => r.value), 1)
+  const observed = observedRange(places)
   const fmt = MEASURES.find((m) => m.key === measure)!.fmt
 
   return (
@@ -199,6 +265,12 @@ export function TopAffected({
           </div>
         </div>
       ))}
+
+      {/* When, and from what. The panel's own standard is that no figure appears without its source
+          and date; this section carried neither, while the assistant beside it cited both. */}
+      {observed ? (
+        <p className="stat-source">{`UNOSAT FloodAI — observed ${observed}. Only townships where water was detected appear.`}</p>
+      ) : null}
     </div>
   )
 }

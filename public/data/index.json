@@ -10,15 +10,6 @@
       "note": "Sentinel-1, 31 Aug 2021 (UNOSAT FL20210831MMR). The analysis extent barely reaches Yangon Region, so almost no flood water is mapped here — this is a gap in the imagery analysed, not evidence that the region stayed dry. The water layer is the same sensor and date as the flood layer (Sentinel-1, 2021-08-31). Two Sentinel-1 passes are published for this event: 2021-08-25 and 2021-08-31. Both are included, so the earlier layer showing through the later one is water that had drained in those six days.",
       "stats": [
         {
-          "label": "Flood risk share",
-          "value": 53.3,
-          "unit": "%",
-          "source": "supplied to the project; provenance not established. The four shares are exactly 16/9/4/1 of 30 records, so this is a tally, not a modelled probability.",
-          "unverified": true,
-          "count": 16,
-          "denominator": 30
-        },
-        {
           "label": "Flood impact (people)",
           "value": 962,
           "unit": "",
@@ -59,15 +50,6 @@
       "note": "Sentinel-1, 31 Aug 2021 (UNOSAT FL20210831MMR). The water layer is the same sensor and date as the flood layer (Sentinel-1, 2021-08-31). Two Sentinel-1 passes are published for this event: 2021-08-25 and 2021-08-31. Both are included, so the earlier layer showing through the later one is water that had drained in those six days.",
       "stats": [
         {
-          "label": "Flood risk share",
-          "value": 30.0,
-          "unit": "%",
-          "source": "supplied to the project; provenance not established. The four shares are exactly 16/9/4/1 of 30 records, so this is a tally, not a modelled probability.",
-          "unverified": true,
-          "count": 9,
-          "denominator": 30
-        },
-        {
           "label": "Flood impact (people)",
           "value": 153336,
           "unit": "",
@@ -106,17 +88,6 @@
       "name": "Mandalay Region, Myanmar",
       "sourceFile": "UNOSAT (HDX)",
       "note": "Sentinel-1, 24 Sep 2024, Typhoon Yagi (UNOSAT FL20240912MMR). Nay Pyi Taw Union Territory is excluded — geoBoundaries ADM1 still draws it inside Mandalay Region, which would double-count it. Note: the water layer for this region comes from Gaofen-3 imaged 2024-09-15, a different satellite and nine days earlier than the flood layer (Sentinel-1, 2024-09-24) — UNOSAT published no Sentinel-1 water extent for this event. Treat the two as separate observations, not a before/after pair.",
-      "stats": [
-        {
-          "label": "Flood risk share",
-          "value": 13.3,
-          "unit": "%",
-          "source": "supplied to the project; provenance not established. The four shares are exactly 16/9/4/1 of 30 records, so this is a tally, not a modelled probability.",
-          "unverified": true,
-          "count": 4,
-          "denominator": 30
-        }
-      ],
       "layers": {
         "floodextent": {
           "path": "data/MM_Mandalay/floodextent.geojson",
@@ -145,17 +116,6 @@
       "name": "Nay Pyi Taw Union Territory, Myanmar",
       "sourceFile": "UNOSAT (HDX)",
       "note": "Sentinel-1, 24 Sep 2024, Typhoon Yagi (UNOSAT FL20240912MMR). Note: the water layer for this region comes from Gaofen-3 imaged 2024-09-15, a different satellite and nine days earlier than the flood layer (Sentinel-1, 2024-09-24) — UNOSAT published no Sentinel-1 water extent for this event. Treat the two as separate observations, not a before/after pair.",
-      "stats": [
-        {
-          "label": "Flood risk share",
-          "value": 3.3,
-          "unit": "%",
-          "source": "supplied to the project; provenance not established. The four shares are exactly 16/9/4/1 of 30 records, so this is a tally, not a modelled probability.",
-          "unverified": true,
-          "count": 1,
-          "denominator": 30
-        }
-      ],
       "layers": {
         "floodextent": {
           "path": "data/MM_NayPyiTaw/floodextent.geojson",
