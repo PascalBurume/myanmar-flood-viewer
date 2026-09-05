@@ -72,6 +72,10 @@ Bago where WFP ADAM has Bago at 99.4% to Yangon's 0.6%. They remain in the git h
 | Detected flood water | `floodextent` | The flood extent for the main date. One flat colour — it carries no depth |
 | Estimation extent | `inputarea` | The area actually analysed. Blank ground outside it means nobody looked, not that it was dry |
 | People exposed | `exposure` | **Nationwide.** One circle per township, area proportional to people under detected water. The only layer measured in people rather than water |
+| Observed track | `cyclones.json` | Tropical cyclones being tracked in the Bay of Bengal and West Pacific: IBTrACS provisional best track, coloured by intensity. Positions get revised |
+| Forecast track | `cyclones.json` | The JTWC official forecast at 12–120 h — dashed and hollow, because it is a **forecast** |
+| Wind radii | `cyclones.json` | How far 34/50/64 kt winds reach in each quadrant at the moment on the timeline. Real data, standing in for the cone Weather Lab draws |
+| Forecast field | `field/` | **Weather view.** Rainfall, ensemble probability or wind from ECMWF / GFS / ICON, one frame per three-hour step |
 
 ## Running it
 
@@ -191,7 +195,8 @@ flowchart TD
   A -- "unchanged" --> H
   F --> H
 
-  H["flood history<br/>142 passes since 2022<br/>→ public/data/history.json"] --> AL
+  H["flood history<br/>142 passes since 2022<br/>→ public/data/history.json"] --> W
+  W["rain & rivers · cyclones · forecast field<br/>Open-Meteo · IBTrACS · JTWC<br/>never fatal"] --> AL
   AL["derive alerts<br/>surge · failed check · new data"] --> S
 
   S["record every stage<br/>→ public/data/status.json"] --> D{"--publish ?"}
@@ -376,6 +381,116 @@ The forecast is fetched **by the pipeline, not by the page**, so the served site
 nothing but the basemap tiles. The stage is never fatal: a flood map is complete without a forecast,
 so an Open-Meteo outage records `skipped` instead of turning a good run red.
 
+### Tropical cyclones
+
+The one layer here modelled on [Google Weather Lab](https://developers.google.com/weathernext/guides/weatherlab):
+observed tracks, a forecast track, wind radii, and a **timeline** under the map that moves a marker
+along every storm. Bay of Bengal cyclones and West Pacific remnants are what drive Myanmar's worst
+floods, so a storm belongs on the same map as the water it will leave behind.
+
+Both sources are public and need no key, which is the only reason they can be used here:
+
+- **Observed** — IBTrACS `ACTIVE` (NOAA NCEI, v04r01): every storm being tracked worldwide, with
+  positions, winds, pressure and the 34/50/64 kt wind radii by quadrant. Positions are
+  *provisional* and get revised; the panel says so. The file drops a storm the moment it
+  dissipates, so `scripts/scan_cyclones.py` keeps a 30-day local memory
+  (`data/cyclones_cache.json`) — otherwise the track of a cyclone that crossed the coast on Monday
+  would vanish from the map on Tuesday, exactly when a reader wants to set it against the floods.
+- **Forecast** — JTWC warnings (US Navy, public domain), found through their RSS feed and parsed
+  from the fixed-format warning text: the analysed position and its stated accuracy, then the
+  official forecast at 12/24/36/48/72/96/120 h. JTWC files the Bay of Bengal under the prefix
+  **`io`** (IBTrACS calls the same basin `NI`) and the West Pacific under `wp`.
+
+Forecast points are drawn dashed and hollow, the forecast half of the timeline is badged
+**Forecast**, and the marker goes hollow once it passes the newest observation — the same rule as
+the hollow forecast bars in the weather panel. **There is no cone.** JTWC publishes one number for
+the analysed position's accuracy, not a growing forecast envelope, and drawing a cone from a made-up
+error growth would present an invention as data. The wind radii are real and are drawn instead; the
+Cone and Ensemble toggles are on the panel, disabled, saying what they need (WeatherNext 3 ensemble
+members). No landfall or impact inference is made anywhere: a JTWC forecast point inside Myanmar
+raises an alert that says where the forecast puts it, and refers the reader to the Department of
+Meteorology and Hydrology for warnings.
+
+The assistant reads the same file through `cyclone_tracks`, which returns winds in kt **and** km/h
+so a converted figure in its answer still passes the grounding check, and carries the same rule in
+its caveats: a track forecast is not a landfall prediction.
+
+### The Weather view
+
+A second reading of the same map, switched in the panel header and deep-linkable as
+`?view=weather` — the URL hash belongs to MapLibre, which writes the camera there on every move, so
+the view goes in the query string. Modelled on [Google Weather Lab](https://deepmind.google/science/weatherlab/):
+a **Model** radio, a stack of **Layers**, the tropical-cyclone card, a timeline under the map and a
+key bottom-right. The flood layers keep drawing underneath — a storm belongs on the same map as the
+water it leaves behind — and switching views never resets what the reader turned on.
+
+**The models are real choices, not a decoration.** ECMWF IFS 0.25° (the baseline everyone else is
+measured against), GFS and ICON, all from [Open-Meteo](https://open-meteo.com/) — public, keyless,
+CC BY 4.0, non-commercial. **WeatherNext 3 is listed and disabled**, wearing the exact reason from
+the pipeline's own stage record, until the Google access below arrives.
+
+| Layer | What it is |
+|---|---|
+| Precipitation | Rain per three-hour step, as a paletted PNG per step |
+| Probability > 25 mm / 3 h | Share of the **51-member ECMWF ensemble** over the threshold |
+| Probability > 50 mm / 3 h | The same for the amount that turns a wet day into a flooding one |
+| Wind 10 m | Arrows pointing downwind, sized by speed, sampled every 1° |
+
+**Only ECMWF publishes its run time.** Open-Meteo exposes `last_run_initialisation_time` for it and
+nothing for GFS or ICON, so those say **"run time not published"** everywhere they appear — in the
+model list, on the legend and in every assistant answer. A forecast without its run time is
+undated, and this project does not print undated figures; it also does not invent one.
+
+**The blocks are the sampling, not the weather.** A 0.25° global model read on a 0.5° grid, about
+55 km a cell, drawn with nearest-neighbour resampling so the cells stay square. Smoothing them
+would draw detail the model does not have.
+
+**Runs are kept on disk** — the newest eight per model — because Open-Meteo serves only the latest,
+and the timeline's `‹ Init. ›` stepper exists to compare the same moment forecast from different
+starts. A model whose current run is already on disk is not fetched again, so a hand-clicked
+"Run update now" costs nothing.
+
+**The limit that bites is per minute, not per day.** Open-Meteo counts a location as a call and
+refuses a burst past roughly 800 in a minute, long before the 10,000-a-day ceiling; the whole grid
+is 819 points. So the scanner paces its batches, fetches every model in **one** request
+(`models=a,b,c` returns a column per model, three times cheaper than three passes), and retries once
+if it is refused anyway. A full run takes a couple of minutes and is never fatal: a refusal is
+recorded as `skipped` with Open-Meteo's own words for it.
+
+### WeatherNext 3 — the fourth model, gated
+
+The second half of the Weather Lab design: a gridded AI forecast over Myanmar you can scrub through
+time — 6-hour rainfall as the ensemble mean, median and 90th percentile, the **probability of
+exceeding 25 / 50 / 100 mm**, and 10 m wind — from Google DeepMind's WeatherNext 3, all 64 members.
+
+It is not among the models yet, and the reason is access rather than code — the Weather view above
+is already built to receive it as a fourth entry in the same radio. WeatherNext data (Cloud
+Storage, BigQuery, Earth Engine, and the Weather Lab site itself) needs a Google Account that
+Google has added to its allow-list through a request form, typically in 5–7 business days; there is
+no anonymous or API-key path, and the "public" statistics bucket answers 403 without one. The full
+ensemble also lives in Zarr v3 chunks compressed with codecs standard-library Python cannot decode,
+so this one stage runs under an isolated virtualenv of Google's own recommended libraries
+(`scripts/wn3_requirements.txt`, Python 3.11+ — separate from the 3.9 the rest of `scripts/` runs on).
+
+So the stage ships as its **gate**. `scripts/scan_weathernext.py` checks, in order, for
+credentials, the virtualenv, an explicit acceptance of the terms, and the reducer, and records the
+first missing one as the stage's `skipped` reason — the panel's "Data & updates" shows exactly what
+is missing, the way the assistant tab explains itself without a key. The four environment variables
+are documented in `.env.example`. `python3 scripts/scan_weathernext.py --check` lists everything
+still missing.
+
+**Open item — the terms.** Real-time WeatherNext output is under the *GDM Real-Time Weather
+Forecasting Experimental Data Terms*, which restrict redistribution; output more than an hour old
+becomes CC BY 4.0. Whether a public site may serve the field is for the operator to decide on
+sign-up, which is why `WEATHERNEXT_ACCEPTED_TERMS=1` is a separate gate and `public/data/wn3/` is
+gitignored: credentials alone publish nothing. The required disclaimer — an experimental AI system
+whose output does not constitute official forecasts, watches or warnings; defer to the Myanmar
+Department of Meteorology and Hydrology — will be on the panel and in every tool result.
+
+Weather Lab's other model, **MetNet Global**, has no programmatic access at all and is omitted.
+Ensemble cyclone tracks and a measured spread "cone" (the disabled toggles on the cyclones card) come
+from the same members, once the reducer exists.
+
 ### What is and is not automated
 
 **ADAM is polled** twice a day (~20 KB per check). Only the newest event's impact table is publicly
@@ -397,6 +512,8 @@ public/data/index.json      the dataset list, read at runtime
 public/data/status.json     what the pipeline last checked and found, plus alerts
 public/data/history.json    142 satellite passes since 2022 — the trend series
 public/data/weather.json    rainfall and river-discharge forecasts
+public/data/cyclones.json   tropical cyclones: observed (IBTrACS) and forecast (JTWC) tracks
+public/data/field/          the forecast field: a manifest, and PNG frames per model run
 public/data/MM_*/           converted GeoJSON per region
 src/                        the viewer
 scripts/common.py           shared helpers
@@ -405,6 +522,9 @@ scripts/status.py           write status.json
 scripts/history.py          rebuild the multi-year series from every FloodAI archive
 scripts/alerts.py           derive surge / failed-check / new-data alerts
 scripts/scan_weather.py     rainfall + GloFAS river discharge (verified channel cells)
+scripts/scan_cyclones.py    cyclone tracks from IBTrACS ACTIVE and JTWC warnings (+ test_cyclones.py)
+scripts/scan_forecast_field.py  the Open-Meteo forecast field (+ png.py, test_forecast_field.py)
+scripts/scan_weathernext.py gate for the WeatherNext 3 field: records why it cannot run yet
 scripts/convert_unosat.py   convert UNOSAT shapefiles (run by hand)
 scripts/run_pipeline.py     the one entrypoint — scan, record, publish
 server/index.mjs            static serving + the pipeline API + /api/health

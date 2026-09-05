@@ -1,6 +1,18 @@
 import { useEffect, useRef } from 'react'
 import maplibregl from 'maplibre-gl'
 
+import { toFeatureCollections, type CycloneDoc, type CycloneShow } from './cyclones'
+import {
+  activeRun,
+  arrowImage,
+  findModel,
+  frameUrl,
+  modelForLayer,
+  nearestStep,
+  windFeatures,
+  type FieldState,
+} from './forecastField'
+
 import {
   RAIN_ATTRIBUTION,
   RAIN_MAX_ZOOM,
@@ -30,6 +42,150 @@ export interface OverlayState {
   datasetVisible: Record<string, boolean>
   /** Measured rainfall, drawn over the basemap. Dated, like the imagery. */
   rain: { on: boolean; date: string; opacity: number }
+  /** Tropical cyclone tracks and what is drawn of them. */
+  cyclones: { doc: CycloneDoc | null; show: CycloneShow }
+  /** The gridded forecast field, drawn under everything the flood map is about. */
+  field: FieldState
+}
+
+// ---- the forecast field ----
+//
+// One `image` source rather than raster tiles: the frames are a few hundred bytes each and the
+// whole point is that scrubbing swaps them instantly, which `updateImage` does without a network
+// round trip per tile. `raster-resampling: 'nearest'` keeps the blocks square — they are the
+// sampling grid, and smoothing them would draw detail the model does not have.
+
+const FIELD = { img: 'field-img', layer: 'field', wind: 'field-wind', arrow: 'wind-arrow' } as const
+
+/** A frame that has not loaded yet, so the source always has something valid in it. */
+const BLANK = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
+
+export function fieldQueryableIds(): string[] {
+  return [FIELD.wind]
+}
+
+export function fieldPopupHeadings(): Map<string, string> {
+  return new Map([[FIELD.wind, 'Forecast field / Wind at 10 m']])
+}
+
+// ---- cyclone layers ----
+//
+// Ids follow the `<dataset>--<kind>-<part>` scheme with `cyclones` as the dataset, so the click
+// handler's `splitLayerId` and the popup headings treat them like any other layer.
+
+const CY = {
+  wind: 'cyclones--wind',
+  observed: 'cyclones--observed',
+  forecast: 'cyclones--forecast',
+  now: 'cyclones--now',
+} as const
+
+const WIND_COLOR: maplibregl.ExpressionSpecification = [
+  'match', ['get', 'kt'], 34, '#f2b705', 50, '#f07d1a', 64, '#d13b2e', '#f2b705',
+]
+
+/** Layer specs, in stacking order within their group. `source` is the CY key they draw from. */
+const CYCLONE_LAYERS: Array<{ show: keyof CycloneShow; spec: maplibregl.LayerSpecification }> = [
+  // Under the floods: translucent wedges, so a detected extent is never washed out by wind.
+  {
+    show: 'wind',
+    spec: {
+      id: `${CY.wind}-fill`, type: 'fill', source: CY.wind,
+      paint: { 'fill-color': WIND_COLOR, 'fill-opacity': ['match', ['get', 'kt'], 34, 0.18, 50, 0.24, 64, 0.32, 0.18] },
+    },
+  },
+  {
+    show: 'wind',
+    spec: {
+      id: `${CY.wind}-outline`, type: 'line', source: CY.wind,
+      paint: { 'line-color': WIND_COLOR, 'line-width': 1, 'line-opacity': 0.6 },
+    },
+  },
+]
+
+/** Over the floods: the tracks themselves. A pale category colour needs a dark casing to be seen. */
+const CYCLONE_TRACK_LAYERS: Array<{ show: keyof CycloneShow; spec: maplibregl.LayerSpecification }> = [
+  {
+    show: 'observed',
+    spec: {
+      id: `${CY.observed}-casing`, type: 'line', source: `${CY.observed}-line`,
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: { 'line-color': '#1b1b1b', 'line-width': 4.5, 'line-opacity': 0.55 },
+    },
+  },
+  {
+    show: 'observed',
+    spec: {
+      id: `${CY.observed}-line`, type: 'line', source: `${CY.observed}-line`,
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: { 'line-color': ['get', 'color'], 'line-width': 2.5 },
+    },
+  },
+  {
+    show: 'observed',
+    spec: {
+      id: `${CY.observed}-points`, type: 'circle', source: `${CY.observed}-points`,
+      paint: { 'circle-radius': 3.5, 'circle-color': ['get', 'color'], 'circle-stroke-color': '#1b1b1b', 'circle-stroke-width': 1 },
+    },
+  },
+  // Forecast: dashed line, hollow points. The same rule as the hollow forecast bars in the panel.
+  {
+    show: 'forecast',
+    spec: {
+      id: `${CY.forecast}-casing`, type: 'line', source: `${CY.forecast}-line`,
+      paint: { 'line-color': '#ffffff', 'line-width': 4, 'line-opacity': 0.7 },
+    },
+  },
+  {
+    show: 'forecast',
+    spec: {
+      id: `${CY.forecast}-line`, type: 'line', source: `${CY.forecast}-line`,
+      paint: { 'line-color': '#2b2b2b', 'line-width': 2, 'line-dasharray': [2, 2] },
+    },
+  },
+  {
+    show: 'forecast',
+    spec: {
+      id: `${CY.forecast}-ring`, type: 'circle', source: `${CY.forecast}-points`,
+      paint: { 'circle-radius': 6.5, 'circle-opacity': 0, 'circle-stroke-color': '#1b1b1b', 'circle-stroke-width': 1 },
+    },
+  },
+  {
+    show: 'forecast',
+    spec: {
+      id: `${CY.forecast}-points`, type: 'circle', source: `${CY.forecast}-points`,
+      paint: { 'circle-radius': 5, 'circle-opacity': 0, 'circle-stroke-color': ['get', 'color'], 'circle-stroke-width': 2.5 },
+    },
+  },
+  // The moment on the timeline: filled when observed, hollow once it is a forecast.
+  {
+    show: 'observed',
+    spec: {
+      id: `${CY.now}-marker`, type: 'circle', source: CY.now,
+      paint: {
+        'circle-radius': 9,
+        'circle-color': ['get', 'color'],
+        'circle-opacity': ['case', ['get', 'isForecast'], 0, 0.95],
+        'circle-stroke-color': '#111111',
+        'circle-stroke-width': 2.5,
+      },
+    },
+  },
+]
+
+/** Layers a click may land on. Points and wedges, not the lines. */
+export function cycloneQueryableIds(): string[] {
+  return [`${CY.now}-marker`, `${CY.forecast}-points`, `${CY.observed}-points`, `${CY.wind}-fill`]
+}
+
+/** Popup headings for the cyclone layers, merged with the dataset ones by the App. */
+export function cyclonePopupHeadings(): Map<string, string> {
+  return new Map([
+    [`${CY.now}-marker`, 'Tropical cyclones / Position at the time shown'],
+    [`${CY.observed}-points`, 'Tropical cyclones / Observed track'],
+    [`${CY.forecast}-points`, 'Tropical cyclones / Forecast track (JTWC)'],
+    [`${CY.wind}-fill`, 'Tropical cyclones / Wind radii'],
+  ])
 }
 
 /**
@@ -53,14 +209,86 @@ export function useMapOverlays(
   imageryDate: string,
   initialCamera: maplibregl.MapOptions | null,
   onClick: (features: maplibregl.MapGeoJSONFeature[], lngLat: maplibregl.LngLat) => void,
+  /**
+   * The moment the timeline is showing. A separate argument, not part of `state`, so a scrub
+   * re-points only the cyclone sources rather than re-running the whole overlay pass.
+   */
+  validTime: string | null = null,
 ) {
   const mapRef = useRef<maplibregl.Map | null>(null)
   const stateRef = useRef(state)
   stateRef.current = state
   const clickRef = useRef(onClick)
   clickRef.current = onClick
+  const timeRef = useRef(validTime)
+  timeRef.current = validTime
   /** The rain date currently loaded into the source, so a change can be detected and re-pointed. */
   const rainDate = useRef('')
+  /** What the cyclone sources currently hold, so a scrub or a refreshed file can be detected. */
+  const cycloneKey = useRef('')
+  /** The same for the field: model, run, layer and moment, so a scrub re-points only what moved. */
+  const fieldKey = useRef('')
+  /** Frames can land out of order over a slow link; only the newest may win. */
+  const fieldSeq = useRef(0)
+
+  /** Re-point the field's image and wind sources at the frame for the current moment. */
+  const syncField = useRef(() => {
+    const map = mapRef.current
+    if (!map || !map.getSource(FIELD.img)) return
+    const field = stateRef.current.field
+    const run = activeRun(field.manifest, field)
+    const model = findModel(field.manifest, modelForLayer(field.model, field.layer))
+    const step = nearestStep(run, timeRef.current, field.manifest?.stepHours ?? 3)
+    // The wind document loads after the layer is selected, and it must be part of the key: without
+    // it the arrivals land on an unchanged key, this returns early and the arrows never appear.
+    const key = `${field.manifest?.generatedAt ?? ''}|${field.model}|${run?.key ?? ''}|${field.layer}|${step?.valid ?? ''}|${field.wind?.steps.length ?? 0}`
+    if (key === fieldKey.current) return
+    fieldKey.current = key
+
+    if (field.layer === 'wind') {
+      ;(map.getSource(FIELD.wind) as maplibregl.GeoJSONSource | undefined)?.setData(
+        windFeatures(field.wind, timeRef.current),
+      )
+      map.setLayoutProperty(FIELD.layer, 'visibility', 'none')
+      map.setLayoutProperty(FIELD.wind, 'visibility', field.on ? 'visible' : 'none')
+      return
+    }
+    map.setLayoutProperty(FIELD.wind, 'visibility', 'none')
+    const url = step ? frameUrl(BASE_URL, step, field.layer) : null
+    // The probability layers come from the ensemble, whose grid — and so whose image quad — is a
+    // different size from the deterministic one, so the coordinates move with the layer.
+    const b = model?.bbox
+    const coordinates: [[number, number], [number, number], [number, number], [number, number]] | undefined = b
+      ? [[b[0], b[3]], [b[2], b[3]], [b[2], b[1]], [b[0], b[1]]]
+      : undefined
+    const seq = ++fieldSeq.current
+    const src = map.getSource(FIELD.img) as maplibregl.ImageSource | undefined
+    if (!src) return
+    if (seq === fieldSeq.current) {
+      void src.updateImage({ url: url ?? BLANK, coordinates })
+    }
+    map.setLayoutProperty(FIELD.layer, 'visibility', field.on && url ? 'visible' : 'none')
+    map.setPaintProperty(FIELD.layer, 'raster-opacity', field.opacity)
+  })
+
+  /** Re-point the cyclone sources at the collections for the current file and moment. */
+  const syncCyclones = useRef(() => {
+    const map = mapRef.current
+    if (!map || !map.getSource(CY.now)) return
+    const { doc } = stateRef.current.cyclones
+    const key = `${doc?.generatedAt ?? ''}|${doc?.storms.length ?? 0}|${timeRef.current ?? ''}`
+    if (key === cycloneKey.current) return
+    const c = toFeatureCollections(doc, timeRef.current)
+    const put = (id: string, data: GeoJSON.FeatureCollection) =>
+      (map.getSource(id) as maplibregl.GeoJSONSource | undefined)?.setData(data)
+    put(CY.wind, c.wind)
+    put(`${CY.observed}-line`, c.observedLine)
+    put(`${CY.observed}-points`, c.observedPoints)
+    put(`${CY.forecast}-line`, c.forecastLine)
+    put(`${CY.forecast}-points`, c.forecastPoints)
+    put(CY.now, c.now)
+    cycloneKey.current = key
+  })
 
   /** Re-add every source and layer, then replay visibility and opacity. */
   const addOverlays = useRef(() => {
@@ -100,6 +328,47 @@ export function useMapOverlays(
     map.setLayoutProperty('rain', 'visibility', rain.on ? 'visible' : 'none')
     map.setPaintProperty('rain', 'raster-opacity', rain.opacity)
 
+    // The forecast field goes in immediately after the rain, and so under every flood layer added
+    // after it against the same anchor: a translucent rain forecast over a detected extent would
+    // wash out the thing the map is actually about.
+    const fieldModel = findModel(stateRef.current.field.manifest, modelForLayer(stateRef.current.field.model, stateRef.current.field.layer))
+    const fb = fieldModel?.bbox ?? [92, 9.5, 102, 28.5]
+    if (!map.getSource(FIELD.img)) {
+      map.addSource(FIELD.img, {
+        type: 'image',
+        url: BLANK,
+        coordinates: [[fb[0], fb[3]], [fb[2], fb[3]], [fb[2], fb[1]], [fb[0], fb[1]]],
+      })
+    }
+    if (!map.getLayer(FIELD.layer)) {
+      map.addLayer(
+        {
+          id: FIELD.layer,
+          type: 'raster',
+          source: FIELD.img,
+          paint: {
+            'raster-opacity': stateRef.current.field.opacity,
+            // The blocks are the sampling grid; smoothing them would imply detail the model does
+            // not have. No cross-fade either, or a scrub flashes between frames.
+            'raster-resampling': 'nearest',
+            'raster-fade-duration': 0,
+          },
+        },
+        before,
+      )
+    }
+
+    // Cyclone sources are created empty and filled by syncCyclones, which is also what a scrub
+    // calls — one path for "the file changed" and "the moment changed".
+    const empty: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] }
+    for (const id of [CY.wind, `${CY.observed}-line`, `${CY.observed}-points`, `${CY.forecast}-line`, `${CY.forecast}-points`, CY.now]) {
+      if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data: empty })
+    }
+    // Wind wedges go in here, under every flood layer added after them.
+    for (const { spec } of CYCLONE_LAYERS) {
+      if (!map.getLayer(spec.id)) map.addLayer(spec, before)
+    }
+
     // Kinds outside, locations inside, so the stacking order survives new locations appearing.
     for (const kind of LAYER_KINDS) {
       for (const ds of index.datasets) {
@@ -130,6 +399,46 @@ export function useMapOverlays(
         }
       }
     }
+
+    // Wind arrows sit above the floods but below the storm tracks. `setStyle` drops registered
+    // images along with the sources, so the icon is re-added here rather than once at startup.
+    if (!map.hasImage(FIELD.arrow)) {
+      const img = arrowImage()
+      if (img) map.addImage(FIELD.arrow, img, { pixelRatio: 2 })
+    }
+    if (!map.getSource(FIELD.wind)) {
+      map.addSource(FIELD.wind, { type: 'geojson', data: empty })
+    }
+    if (!map.getLayer(FIELD.wind)) {
+      map.addLayer(
+        {
+          id: FIELD.wind,
+          type: 'symbol',
+          source: FIELD.wind,
+          layout: {
+            'icon-image': FIELD.arrow,
+            'icon-rotate': ['get', 'rot'],
+            'icon-rotation-alignment': 'map',
+            'icon-allow-overlap': false,
+            // Monsoon surface winds over Myanmar are often only a few km/h, so the floor has to
+            // be large enough to read at all; the range still separates a breeze from a gale.
+            'icon-size': ['interpolate', ['linear'], ['get', 'kmh'], 0, 0.6, 20, 0.95, 60, 1.5],
+          },
+        },
+        before,
+      )
+    }
+
+    // Tracks go in last, over the exposure circles, and the marker over everything.
+    for (const { spec } of CYCLONE_TRACK_LAYERS) {
+      if (!map.getLayer(spec.id)) map.addLayer(spec, before)
+    }
+    const { show, doc } = stateRef.current.cyclones
+    for (const { show: key, spec } of [...CYCLONE_LAYERS, ...CYCLONE_TRACK_LAYERS]) {
+      map.setLayoutProperty(spec.id, 'visibility', doc && show[key] ? 'visible' : 'none')
+    }
+    syncCyclones.current()
+    syncField.current()
   })
 
   // ---- create the map, once ----
@@ -150,6 +459,9 @@ export function useMapOverlays(
         attributionControl: false,
       })
       mapRef.current = map
+      // Dev only: a handle for poking the style from the console or a browser tool. Never in a
+      // production build — nothing there should reach into the map from outside React.
+      if (import.meta.env.DEV) (window as unknown as { __map?: maplibregl.Map }).__map = map
 
       map.addControl(new maplibregl.NavigationControl({ showCompass: true, visualizePitch: true }), 'top-right')
       map.addControl(
@@ -170,12 +482,12 @@ export function useMapOverlays(
       map.on('style.load', () => addOverlays.current())
 
       map.on('click', (e) => {
-        const ids = queryableLayerIds(stateRef.current.index).filter((id) => map.getLayer(id))
+        const ids = [...cycloneQueryableIds(), ...fieldQueryableIds(), ...queryableLayerIds(stateRef.current.index)].filter((id) => map.getLayer(id))
         const features = map.queryRenderedFeatures(e.point, { layers: ids })
         clickRef.current(features, e.lngLat)
       })
       map.on('mousemove', (e) => {
-        const ids = queryableLayerIds(stateRef.current.index).filter((id) => map.getLayer(id))
+        const ids = [...cycloneQueryableIds(), ...fieldQueryableIds(), ...queryableLayerIds(stateRef.current.index)].filter((id) => map.getLayer(id))
         const hit = ids.length > 0 && map.queryRenderedFeatures(e.point, { layers: ids }).length > 0
         map.getCanvas().style.cursor = hit ? 'pointer' : ''
       })
@@ -202,17 +514,53 @@ export function useMapOverlays(
       // subsequent date change is compared against a source that no longer exists.
       if (seq === styleSeq.current && mapRef.current) {
         rainDate.current = ''
+        cycloneKey.current = ''
+        fieldKey.current = ''
         mapRef.current.setStyle(style)
       }
     })
   }, [basemap, theme, imageryDate])
 
   // ---- visibility, opacity and data changes ----
+  //
+  // A file that arrives while the style is still loading used to be dropped here — the guard
+  // returned and nothing re-triggered, because `style.load` had already fired. It showed up as the
+  // wind arrows never appearing after a reload: the document landed a moment too early and its
+  // source stayed empty until something else happened to nudge the state. Deferring to the next
+  // idle rather than returning keeps the guard's purpose (never call addLayer on a half-built
+  // style) without losing the update.
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !map.isStyleLoaded()) return
-    addOverlays.current()
+    if (!map) return
+    if (map.isStyleLoaded()) {
+      addOverlays.current()
+      return
+    }
+    const onIdle = () => addOverlays.current()
+    map.once('idle', onIdle)
+    return () => {
+      map.off('idle', onIdle)
+    }
   }, [state])
+
+  // ---- the timeline moved: only the moving sources need re-pointing ----
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    if (map.isStyleLoaded()) {
+      syncCyclones.current()
+      syncField.current()
+      return
+    }
+    const onIdle = () => {
+      syncCyclones.current()
+      syncField.current()
+    }
+    map.once('idle', onIdle)
+    return () => {
+      map.off('idle', onIdle)
+    }
+  }, [validTime])
 
   /** Re-point every existing source at a new version-stamped URL, then add anything new. */
   const applyIndex = useRef(async (next: DataIndex) => {

@@ -12,6 +12,30 @@ import {
 } from './basemap'
 import { AboutDialog, PipelineDialog } from './components/Dialogs'
 import { Panel } from './components/Panel'
+import { Timeline } from './components/Timeline'
+import { MapLegend } from './components/MapLegend'
+import {
+  activeRun,
+  fieldFrames,
+  frameUrl,
+  mergeFrames,
+  nearestStep,
+  runsFor,
+  useForecastField,
+  useWindDoc,
+  type FieldState,
+} from './forecastField'
+import {
+  DEFAULT_SHOW,
+  cycloneFrames,
+  observedUntil,
+  stormBounds,
+  useCyclones,
+  type CycloneLayerKey,
+  type CycloneShow,
+  type Storm,
+} from './cyclones'
+import { formatMMT as formatTime } from './time'
 import { useExposure } from './components/TopAffected'
 import { useHistory } from './components/Trend'
 import { Alerts } from './components/Alerts'
@@ -31,28 +55,21 @@ import {
   startRun,
   type RunState,
   freshness,
+  stepsFromStatus,
   type StatusDoc,
 } from './pipeline'
 import { applyThemeAttr, initialTheme, type Theme } from './theme'
-import { popupHeadings, queryableLayerIds, useMapOverlays } from './useMapOverlays'
+import {
+  cyclonePopupHeadings,
+  cycloneQueryableIds,
+  fieldPopupHeadings,
+  fieldQueryableIds,
+  popupHeadings,
+  queryableLayerIds,
+  useMapOverlays,
+} from './useMapOverlays'
 
 const BASE_URL = import.meta.env.BASE_URL
-
-/** Times are shown in Myanmar time: the data is about Myanmar, so that is what its readers use. */
-function formatTime(iso: string): string {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return iso
-  const s = new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Asia/Yangon',
-    year: 'numeric',
-    month: 'short',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hourCycle: 'h23',
-  }).format(d)
-  return `${s} MMT`
-}
 
 /** Step an ISO date by whole days, in UTC so it cannot drift across a local midnight. */
 function shiftDay(iso: string, days: number): string {
@@ -77,6 +94,25 @@ export function App({ initialIndex }: { initialIndex: DataIndex }) {
   // Rainfall is an overlay, not a basemap: rain without the ground under it says very little, so it
   // rides on top of whichever base is showing rather than replacing it.
   const [rain, setRain] = useState({ on: false, date: defaultRainDate(), opacity: 0.65 })
+  const [cycloneShow, setCycloneShow] = useState<CycloneShow>(DEFAULT_SHOW)
+  /**
+   * Which reading of the map is on show. MapLibre owns the URL hash (it writes the camera there on
+   * every move), so the view goes in the query string, which it never touches.
+   */
+  const [view, setView] = useState<'floods' | 'weather'>(() =>
+    new URLSearchParams(window.location.search).get('view') === 'weather' ? 'weather' : 'floods',
+  )
+  const [fieldOn, setFieldOn] = useState(() => new URLSearchParams(window.location.search).get('view') === 'weather')
+  const [fieldModel, setFieldModel] = useState<FieldState['model']>('ecmwf')
+  const [fieldLayer, setFieldLayer] = useState<FieldState['layer']>('precip')
+  const [fieldRun, setFieldRun] = useState<string | null>(null)
+  const [fieldOpacity, setFieldOpacity] = useState(0.75)
+  /**
+   * The timeline. `validTime` is the moment the map shows; null means "the newest observation",
+   * which is what the map opens on and what a reader who never touches the scrubber sees.
+   */
+  const [validTime, setValidTime] = useState<string | null>(null)
+  const [playing, setPlaying] = useState(false)
   /**
    * Which day of NASA imagery to show. Defaults to the day the flood data was observed, so
    * switching to Satellite lands on the picture that matches the polygons rather than on today.
@@ -119,6 +155,16 @@ export function App({ initialIndex }: { initialIndex: DataIndex }) {
 
   useEffect(() => applyThemeAttr(theme), [theme])
 
+  // The view is deep-linkable. `replaceState` rather than `pushState`: switching view is not a
+  // navigation a reader expects the back button to undo, and the hash MapLibre keeps writing there
+  // has to survive untouched.
+  useEffect(() => {
+    const url = new URL(window.location.href)
+    if (view === 'weather') url.searchParams.set('view', 'weather')
+    else url.searchParams.delete('view')
+    window.history.replaceState(null, '', `${url.pathname}${url.search}${window.location.hash}`)
+  }, [view])
+
   // Leave room on the left so the panel does not cover the data it describes.
   //
   // The width is read from the panel's own `--panel-w` token rather than repeated here. It used to
@@ -154,10 +200,59 @@ export function App({ initialIndex }: { initialIndex: DataIndex }) {
     return { bounds, fitBoundsOptions: { padding: fitPadding } }
   }, [initialIndex, fitPadding])
 
-  const headings = useMemo(() => popupHeadings(index), [index])
+  const headings = useMemo(
+    () => new Map([...popupHeadings(index), ...cyclonePopupHeadings(), ...fieldPopupHeadings()]),
+    [index],
+  )
   const places = useExposure(index, BASE_URL)
   const history = useHistory(BASE_URL, dataVersion)
   const weather = useWeather(BASE_URL, dataVersion)
+  const cyclones = useCyclones(BASE_URL, dataVersion)
+  const fieldManifest = useForecastField(BASE_URL, dataVersion)
+  const cyclonesState = useMemo(() => ({ doc: cyclones, show: cycloneShow }), [cyclones, cycloneShow])
+  const observedTo = useMemo(() => observedUntil(cyclones), [cyclones])
+  const fieldBase = useMemo(
+    () => ({ manifest: fieldManifest, on: fieldOn, model: fieldModel, run: fieldRun, layer: fieldLayer, opacity: fieldOpacity, wind: null }),
+    [fieldManifest, fieldOn, fieldModel, fieldRun, fieldLayer, fieldOpacity],
+  )
+  const fieldRunDoc = useMemo(() => activeRun(fieldManifest, fieldBase), [fieldManifest, fieldBase])
+  const windDoc = useWindDoc(BASE_URL, fieldRunDoc, fieldOn && fieldLayer === 'wind')
+  const field = useMemo<FieldState>(() => ({ ...fieldBase, wind: windDoc }), [fieldBase, windDoc])
+  const onField = useCallback((patch: Partial<FieldState>) => {
+    if (patch.on !== undefined) setFieldOn(patch.on)
+    if (patch.model !== undefined) setFieldModel(patch.model)
+    if (patch.layer !== undefined) setFieldLayer(patch.layer)
+    if (patch.run !== undefined) setFieldRun(patch.run)
+    if (patch.opacity !== undefined) setFieldOpacity(patch.opacity)
+  }, [])
+
+  /**
+   * One timeline over both systems. Storm positions are observations up to the newest fix; every
+   * field frame is model output whatever its time, so `mergeFrames` marks those outright rather
+   * than comparing them against a boundary a model without a published run time cannot supply.
+   */
+  const frames = useMemo(
+    () => mergeFrames(cycloneFrames(cyclones), fieldOn ? fieldFrames(fieldRunDoc) : [], observedTo),
+    [cyclones, fieldOn, fieldRunDoc, observedTo],
+  )
+  const runList = useMemo(() => runsFor(fieldManifest, fieldModel, fieldLayer), [fieldManifest, fieldModel, fieldLayer])
+  const runIndex = Math.max(runList.findIndex((r) => r.key === (fieldRunDoc?.key ?? '')), 0)
+  /** Step to an older or newer run of the same model, keeping the reader near the same moment. */
+  const stepRun = useCallback(
+    (dir: -1 | 1) => {
+      const next = runList[runIndex + dir]
+      if (!next) return
+      setFieldRun(next.key)
+      const step = nearestStep(next, validTime ?? observedTo, fieldManifest?.stepHours ?? 3)
+      if (step) setValidTime(step.valid)
+    },
+    [runList, runIndex, validTime, observedTo, fieldManifest],
+  )
+  /** Why WeatherNext is not among the models, in the pipeline's own words. */
+  const weathernextReason = useMemo(
+    () => stepsFromStatus(status).find((x) => x.key === 'weathernext')?.detail ?? null,
+    [status],
+  )
 
 
   const onMapClick = useCallback(
@@ -185,8 +280,8 @@ export function App({ initialIndex }: { initialIndex: DataIndex }) {
   )
 
   const overlayState = useMemo(
-    () => ({ index, kindVisible, kindOpacity, datasetVisible, rain }),
-    [index, kindVisible, kindOpacity, datasetVisible, rain],
+    () => ({ index, kindVisible, kindOpacity, datasetVisible, rain, cyclones: cyclonesState, field }),
+    [index, kindVisible, kindOpacity, datasetVisible, rain, cyclonesState, field],
   )
 
   const { mapRef, addOverlays, applyIndex } = useMapOverlays(
@@ -197,6 +292,15 @@ export function App({ initialIndex }: { initialIndex: DataIndex }) {
     imageryDate,
     initialCamera as unknown as maplibregl.MapOptions,
     onMapClick,
+    validTime,
+  )
+
+  const zoomToStorm = useCallback(
+    (storm: Storm) => {
+      const b = stormBounds(storm)
+      if (b) mapRef.current?.fitBounds(b, { padding: fitPadding, maxZoom: 7 })
+    },
+    [fitPadding, mapRef],
   )
 
 const zoomTo = useCallback(
@@ -387,7 +491,7 @@ const zoomTo = useCallback(
           [pt.x - 5, pt.y - 5],
           [pt.x + 5, pt.y + 5],
         ]
-        const ids = queryableLayerIds(index).filter((id) => map.getLayer(id))
+        const ids = [...cycloneQueryableIds(), ...fieldQueryableIds(), ...queryableLayerIds(index)].filter((id) => map.getLayer(id))
         const hits = map.queryRenderedFeatures(box, { layers: ids })
         return {
           onScreen: true,
@@ -399,7 +503,7 @@ const zoomTo = useCallback(
       inView() {
         const map = mapRef.current
         if (!map) return []
-        const ids = queryableLayerIds(index).filter((id) => map.getLayer(id))
+        const ids = [...cycloneQueryableIds(), ...fieldQueryableIds(), ...queryableLayerIds(index)].filter((id) => map.getLayer(id))
         if (!ids.length) return []
         const hits = map.queryRenderedFeatures({ layers: ids })
         return hits.map((f) => ({ layer: f.layer.id, properties: (f.properties ?? {}) as Record<string, unknown> }))
@@ -418,8 +522,15 @@ const zoomTo = useCallback(
       status,
       history,
       weather,
-      map: { basemap, imageryDate, rain, kindVisible, kindOpacity, query: mapQuery },
+      cyclones,
+      fieldManifest,
+      map: { basemap, imageryDate, rain, kindVisible, kindOpacity, cycloneShow, view, field, frames, query: mapQuery },
       actions: {
+        setCycloneLayer: (k: CycloneLayerKey, v: boolean) => setCycloneShow((s) => ({ ...s, [k]: v })),
+        setView,
+        setValidTime,
+        setPlaying,
+        setField: onField,
         setKindVisible: (k: KindKey, v: boolean) => setKindVisible((s) => ({ ...s, [k]: v })),
         setKindOpacity: (k: KindKey, v: number) => setKindOpacity((s) => ({ ...s, [k]: v })),
         setDatasetVisible: (id: string, v: boolean) => setDatasetVisible((s) => ({ ...s, [id]: v })),
@@ -435,8 +546,8 @@ const zoomTo = useCallback(
       },
     }),
     [
-      index, places, status, history, weather,
-      basemap, imageryDate, rain, kindVisible, kindOpacity,
+      index, places, status, history, weather, cyclones, fieldManifest,
+      basemap, imageryDate, rain, kindVisible, kindOpacity, cycloneShow, view, field, frames, onField,
       zoomTo, handleZoom, fitAllCamera, mapQuery,
     ],
   )
@@ -521,6 +632,16 @@ const zoomTo = useCallback(
         weather={weather}
         rain={rain}
         onRain={setRain}
+        view={view}
+        onView={setView}
+        field={field}
+        onField={onField}
+        weathernextReason={weathernextReason}
+        cyclones={cyclones}
+        cycloneShow={cycloneShow}
+        onCycloneShow={(k, v) => setCycloneShow((s) => ({ ...s, [k]: v }))}
+        validTime={validTime}
+        onZoomStorm={zoomToStorm}
         chat={chatContext}
         onRunPipeline={handleRun}
         runBusy={busy}
@@ -600,6 +721,30 @@ const zoomTo = useCallback(
         </div>
       ) : null}
       {showImageryDate && clearSearch ? <div className="imagery-note">{clearSearch}</div> : null}
+
+      <Timeline
+        frames={frames}
+        value={validTime ?? frames[0]?.t ?? observedTo}
+        onChange={setValidTime}
+        playing={playing}
+        onPlaying={setPlaying}
+        observedUntil={observedTo}
+        initTime={fieldOn ? (fieldRunDoc?.init ?? null) : null}
+        initIndex={runIndex}
+        initCount={runList.length}
+        onInitStep={fieldOn && runList.length > 1 ? stepRun : undefined}
+        preload={
+          fieldOn && fieldLayer !== 'wind'
+            ? (t) => {
+                const step = nearestStep(fieldRunDoc, t, fieldManifest?.stepHours ?? 3)
+                const url = step ? frameUrl(BASE_URL, step, fieldLayer) : null
+                return url ? [url] : []
+              }
+            : undefined
+        }
+      />
+
+      <MapLegend field={field} />
 
       <div id="basemap" className="basemap-switch" role="tablist" aria-label="Basemap">
         {(Object.keys(BASEMAP_LABELS) as Basemap[]).map((key) => (

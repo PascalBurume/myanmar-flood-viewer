@@ -1,0 +1,8 @@
+# The WeatherNext 3 reducer's virtualenv — the one non-stdlib corner of the pipeline.
+# Google's own access recipe: https://developers.google.com/weathernext/guides/gcs
+# Needs Python 3.11+ (this project's own scripts run on 3.9; keep the two interpreters separate):
+#   python3.11 -m venv .venv-wn3 && .venv-wn3/bin/pip install -r scripts/wn3_requirements.txt
+xarray
+zarr>=3
+obstore
+numpy

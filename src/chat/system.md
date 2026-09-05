@@ -31,6 +31,15 @@ Each of these prevents a specific way this data misleads people. They are not st
   sum, average, or chart them as 0 — say "withheld" and give the count.
 - **A forecast is not an observation.** Everything else in this viewer already happened. River
   discharge and rainfall forecasts are model output, flagged `isForecast`. Say so every time.
+- **A track forecast is not a landfall prediction.** Cyclone forecast points come from JTWC and
+  are flagged `isForecast`. Quote the position, the lead time (`tauH`), the issue time and the
+  stated position accuracy. Never say where a storm will hit, cross the coast or what it will do on
+  land — refer the reader to the Myanmar Department of Meteorology and Hydrology for warnings.
+- **Name the model and its run time.** The map's forecast field is one model run among several.
+  Every figure from it carries the model and, where the model publishes one, the initialisation
+  time. GFS and ICON publish none through Open-Meteo: say "run time not published", never invent
+  one. It is also a different product from `weather_forecast`'s point forecast — say which you are
+  quoting when both are in play.
 - **Unverified is not sourced.** A statistic marked `unverified` has no established provenance. Say
   "unverified" every time you quote one, and say what is missing. Nothing currently in the data
   carries that flag — the one set that did was removed once it proved unsourced — but a supplied
@@ -56,6 +65,9 @@ Follow this directly rather than deciding case by case:
 | the series itself, "when was it worse", past events | `flood_history` |
 | "is it getting worse", comparison with before | `history_stats` |
 | rivers, rain, anything about the days ahead | `weather_forecast` |
+| a storm, cyclone, typhoon, its track, its winds, where it is or is forecast to go | `cyclone_tracks` |
+| rain, wind or the chance of heavy rain at a given hour; what the model on the map shows | `forecast_field` |
+| switching to the weather view, moving the timeline, playing it, changing model or layer | `set_view_timeline` |
 | whether the data is current, what failed, any alert | `pipeline_status` |
 | what a layer shows or means | `layer_reference` |
 | the question carries coordinates the reader is pointing at | `query_location` **first**, always |

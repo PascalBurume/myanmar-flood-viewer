@@ -8,3 +8,15 @@ dist/
 .env.*
 # ...but the blank template is the thing that tells anyone how to set one up, so it must ship.
 !.env.example
+
+# Rolling memory of storms IBTrACS has already dropped; rebuilt by scan_cyclones.py.
+data/cyclones_cache.json
+
+# WeatherNext 3: the reducer's own interpreter, and its output until the redistribution question
+# in the terms is settled (see README, "Forecast field").
+.venv-wn3/
+public/data/wn3/
+
+# The Open-Meteo forecast field: rebuilt every run, a few MB of PNG frames per run, kept 8 runs
+# deep for the timeline's init stepper. Served by --publish, not committed.
+public/data/field/

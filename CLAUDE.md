@@ -301,6 +301,62 @@ Fetched **by the pipeline, not the page**, so the served site still contacts not
 tiles. The stage is **never fatal** — a flood map is complete without a forecast, so an Open-Meteo
 outage records `skipped` rather than turning a good run red.
 
+## The Weather view
+
+A second reading of the same map (`?view=weather`), modelled on Google Weather Lab: a Model radio,
+Layers, the cyclone card, an init stepper on the timeline and a key on the map. `scripts/
+scan_forecast_field.py` → `public/data/field/`; `src/forecastField.ts` holds the types and the
+derivations, `WeatherControls.tsx` and `MapLegend.tsx` the surfaces.
+
+**The URL hash belongs to MapLibre** (`hash: true` writes the camera there on every move), so the
+view is a query parameter and the effect that writes it preserves `location.hash`.
+
+Traps recorded:
+
+- **A MapLibre `image` source is one quad in Web Mercator.** Rows spaced evenly in latitude land up
+  to a whole cell off across a 19° span — measured: 58 of 156 output rows move by one cell. So the
+  PNG is written with Mercator-spaced rows (`mercator_rows()`), four per cell, and the unit test
+  pins both the count and the direction.
+- **The per-minute limit is the one that bites.** Open-Meteo counts a location as a call and
+  refuses past roughly 800 in a minute — the grid is 819 — while the daily ceiling is 10,000. Hence
+  `Pacer`, and `api()` retrying once on a 429 because Open-Meteo's rolling window and ours disagree
+  at the boundary. The ensemble endpoint costs far more than its location count and gets its own,
+  much smaller budget.
+- **`models=a,b,c` returns a column per model for the same locations**, so all three deterministic
+  models cost one pass over the grid rather than three.
+- **Open-Meteo's hourly series starts at 00:00 UTC today** whatever the run's init, so the hours
+  before the init belong to the previous run and are dropped.
+- **Only ECMWF publishes `last_run_initialisation_time`.** GFS and ICON say "run time not
+  published" everywhere — never a guessed one — and their run directories are keyed by fetch time.
+- **A forecast frame is a forecast whatever its timestamp.** The badge first read `t >
+  observedUntil`, which with a model that publishes no init left every field frame labelled
+  *Observed*. `mergeFrames` now marks field frames outright and ORs in the storm boundary.
+- **An update that lands while the style is loading used to be dropped.** The `[state]` effect
+  returned when `isStyleLoaded()` was false and nothing re-triggered it, so a wind file arriving a
+  moment early left its source empty until something else nudged the state. It now defers to the
+  next `idle` instead of returning.
+- **`syncField`'s cache key must include the wind document.** Without it the async arrival landed on
+  an unchanged key and the arrows never appeared — the same class of bug as the one above, found the
+  same way.
+- **Run directories are immutable**: written once, deleted when they age out. `server/index.mjs`
+  serves them `immutable` (the one exception under `/data`) so the timeline's preload warms
+  anything; the manifest stays `no-cache`.
+- **The palette is one table.** `LEGENDS` in the scanner classifies the pixels and is copied into
+  the manifest, which is what `MapLegend` draws. The client must never carry its own stops.
+- **Wind direction is where the wind comes from**; the arrow rotates 180°. Surface winds here are
+  often a few km/h, so the icon-size floor is large enough to read at all.
+- **`points.json` exists so the assistant never reads a pixel**, and carries km/h with m/s for the
+  same reason `cyclone_tracks` carries kt with km/h — the grounding check looks for every quoted
+  figure in some tool result.
+- **A nullable enum is a hard 400** (`check_chat_tools.mjs`), so `set_view_timeline` uses a `'keep'`
+  sentinel rather than null — the same shape `layer_reference` uses with `'all'`.
+- **The strict-tool budget is now full at 20/20.** The next tool must be non-strict (validating in
+  its handler) or replace one. WeatherNext needs none: it is a `model` enum value in both new tools.
+- **The Weather pane is a third `panel-body`**, `hidden`-toggled like the other two, so the
+  `[hidden]` override and the collapsed-panel rule already cover it and each view keeps its scroll.
+- **The legend follows `field.on`, not the view**: a forecast carries its model and run time
+  wherever it is drawn.
+
 ## Monitoring
 
 Three layers, added together, each answering a question the others cannot.
@@ -384,6 +440,62 @@ can be perfectly healthy and completely out of date, and only the run's age says
 update and serve are separate jobs, and coupling them would mean a crashed web server silently stops
 the data updating too.
 
+
+## Cyclones
+
+Tropical cyclone tracks, modelled on Google Weather Lab's controls card, from two public keyless
+sources: IBTrACS `ACTIVE` (observed) and JTWC warnings (forecast). `scripts/scan_cyclones.py` →
+`public/data/cyclones.json`; geometry is built in the browser (`src/cyclones.ts`) so the file holds
+numbers only and the assistant reads the same numbers the map draws.
+
+Traps recorded so far:
+
+- **JTWC files the Bay of Bengal under `io`, not `ni`.** IBTrACS calls the same basin `NI`. The RSS
+  regex matches `(?:wp|io)\d{4}`; matching `ni` would silently drop every Bay of Bengal storm.
+- **IBTrACS's second CSV line is a units row.** Skipped by testing `SEASON.isdigit()`; a
+  `DictReader` alone hands it back as a storm with SID `' '`.
+- **JTWC wind radii continue on unprefixed lines.** Only the NE quadrant carries `RADIUS OF 034 KT
+  WINDS -`; the other three are bare `045 NM SOUTHEAST QUADRANT` lines and must be attached to the
+  threshold above them. `test_cyclones.py` pins this.
+- **JTWC times carry only a day of month.** `ddhhmm()` resolves against the feed's `pubDate` and
+  picks whichever adjacent month lands nearest — a warning issued on the 30th forecasting to the
+  2nd crosses a month.
+- **ACTIVE drops a storm the moment it dissipates**, hence the 30-day `data/cyclones_cache.json`
+  (gitignored). Without it the track of a cyclone that made landfall on Monday would vanish on
+  Tuesday.
+- **A JTWC warning often precedes IBTrACS by a day.** It becomes a provisional `JTWC:<atcf>` storm
+  whose single "observed" point is the warning position, superseded when IBTrACS carries the ATCF id.
+- **A cached forecast older than 36 h is dropped**, not carried forward as current.
+
+**No cone without members.** JTWC publishes a single position-accuracy figure, not error growth by
+lead, so a cone here would be an invention drawn as data. Wind radii take its visual role; the Cone
+and Ensemble toggles stay on the panel, disabled, saying what they need. Phase 2 (WeatherNext 3
+members) turns them on with a *measured* spread.
+
+**The timeline** (`src/components/Timeline.tsx`) is the reader's clock: never autoplays, steps at
+1.5 s under `prefers-reduced-motion`, and badges Observed/Forecast from `observedUntil`. Its
+`validTime` is passed to `useMapOverlays` as a **separate argument**, not inside `OverlayState`, so a
+scrub re-points only the cyclone sources (`syncCyclones`) rather than re-running the whole overlay
+pass. It must **never** enter the assistant's `<context>` block — it changes on every scrub, which
+is a clock by another name and would kill the cached prefix.
+
+**Layer stacking:** wind wedges are added *before* the `LAYER_KINDS` loop (under the floods);
+tracks and the marker *after* it (over the exposure circles). `cycloneKey` is cleared in the
+`setStyle` effect alongside `rainDate` for the same reason.
+
+**The assistant's `cyclone_tracks` returns kt and km/h both**: the grounding check looks for every
+figure the answer quotes in some tool result, and a model that converts 65 kt to 120 km/h in prose
+would otherwise be told it invented a number.
+
+**WeatherNext 3 is gated, and the gate shipped first.** `scripts/scan_weathernext.py` records
+`skipped: <first missing thing>` — credentials (`WEATHERNEXT_PROJECT`,
+`GOOGLE_APPLICATION_CREDENTIALS`), the `.venv-wn3` virtualenv (Python 3.11+; this Mac's Python is
+3.9 and Zarr v3's compressed chunks are beyond the standard library), `WEATHERNEXT_ACCEPTED_TERMS=1`,
+then the reducer. The terms gate is separate from credentials on purpose: real-time WeatherNext
+output is under redistribution-restricting experimental terms (CC BY 4.0 after an hour), and that is
+the operator's call on sign-up, not code's. Nothing under `public/data/wn3/` is committed until it
+is made. Access needs a Google Account on Google's allow-list (request form, 5–7 business days);
+there is no anonymous path — the "public" statistics bucket returns 403.
 
 ## The assistant
 
@@ -617,6 +729,9 @@ not a pipeline. Python's `zipfile` stands in for `unzip`.
 - [x] add weather: IMERG rainfall on the map, Open-Meteo rain and GloFAS discharge forecasts
 - [x] draw the run as a live horizontal stepper fed by the pipeline's own progress markers
 - [x] add a grounded assistant in the panel: client-side tool loop, key-holding server proxy
+- [x] add tropical cyclone tracks (IBTrACS + JTWC, public) with a timeline scrubber — Weather Lab, phase 1
+- [x] add the Weather view: Open-Meteo forecast field (ECMWF / GFS / ICON + 51-member ensemble), model radio, init stepper, map legend
+- [ ] WeatherNext 3 gridded field + ensemble cyclone tracks once Google allow-list access arrives (phases 2–3)
 - [ ] decide whether to extend or stop the scan when `SCAN_UNTIL` (2026-09-14) is reached
 - [ ] add drawing code if a new layer kind arrives (anything outside `LAYER_KINDS`:
       `waterextent` / `floodextentearly` / `floodextent` / `inputarea` / `exposure`)

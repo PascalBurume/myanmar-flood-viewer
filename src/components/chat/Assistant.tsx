@@ -51,6 +51,9 @@ const TOOL_LABEL: Record<ToolName, string> = {
   show_chart: 'drew a chart',
   request_pipeline_run: 'asked about updating',
   check_run_state: 'run state',
+  cyclone_tracks: 'cyclone tracks',
+  forecast_field: 'forecast field',
+  set_view_timeline: 'moved the view',
 }
 
 const SUGGESTIONS = [

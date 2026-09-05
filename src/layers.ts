@@ -311,6 +311,23 @@ const PROP_LABELS: Record<string, string> = {
   Confidence: 'Confidence',
   Area_ha: 'Area (ha)',
   EventCode: 'UNOSAT event',
+  // Cyclone track and wind-radii properties, built in src/cyclones.ts.
+  name: 'Storm',
+  basin: 'Basin',
+  t: 'Valid (UTC)',
+  tauH: 'Lead (h)',
+  windKt: 'Max wind (kt)',
+  windKmh: 'Max wind (km/h)',
+  presHpa: 'Pressure (hPa)',
+  category: 'Category',
+  kt: 'Wind threshold (kt)',
+  quadrant: 'Quadrant',
+  radiusNm: 'Radius (nm)',
+  radiusKm: 'Radius (km)',
+  issued: 'Issued (UTC)',
+  accuracyNm: 'Position accuracy (nm)',
+  isForecast: 'Forecast',
+  source: 'Source',
 }
 
 function formatValue(value: unknown): string {

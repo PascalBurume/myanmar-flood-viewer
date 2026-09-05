@@ -2187,3 +2187,448 @@ body {
 }
 
 .stat-explain:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* ---- Tropical cyclones (src/components/Cyclones.tsx) ----
+   The controls card mirrors Weather Lab's: models, then layers. A disabled row keeps its label and
+   says what it needs, so a control that exists elsewhere is explained here rather than missing. */
+.cy {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.controls-card {
+  border: 1px solid var(--card-line);
+  border-radius: 12px;
+  background: var(--card-bg);
+  box-shadow: var(--card-shadow);
+  padding: 6px 4px;
+  flex: none;
+}
+
+.controls-head {
+  margin: 4px 8px 2px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.cy-row .toggle {
+  padding-bottom: 2px;
+}
+
+.cy-row .layer-desc {
+  margin: 0 8px 6px 8px;
+}
+
+.cy-row.is-disabled .t-label,
+.cy-row.is-disabled .layer-desc {
+  color: var(--ink-3);
+}
+
+.cy-row.is-disabled .switch {
+  opacity: 0.45;
+}
+
+.cy-storms {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cy-storm {
+  padding: 8px 10px;
+  border: 1px solid var(--card-line);
+  border-radius: var(--radius-sm);
+  background: var(--card-bg);
+  flex: none;
+}
+
+.cy-storm-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+}
+
+.cy-storm-head .legend-chip {
+  border: 1px solid rgba(0, 0, 0, 0.35);
+  border-radius: 999px;
+}
+
+.cy-storm-head .mini-btn {
+  margin-left: auto;
+}
+
+.cy-basin {
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+.cy-storm-line,
+.cy-storm-meta {
+  margin: 4px 0 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.cy-storm-line.is-forecast {
+  /* The same hatch the forecast bars use: a forecast line reads as one at a glance. */
+  padding-left: 8px;
+  border-left: 3px solid transparent;
+  border-image: repeating-linear-gradient(45deg, transparent, transparent 2px, var(--accent) 2px, var(--accent) 3px) 1;
+}
+
+.cy-storm-meta {
+  color: var(--ink-3);
+}
+
+.cy-legend .legend-chip {
+  border: 1px solid rgba(0, 0, 0, 0.3);
+}
+
+.cy-legend-forecast {
+  background: transparent !important;
+  border: 2px dashed var(--ink-2) !important;
+  border-radius: 999px;
+}
+
+/* ---- The timeline (src/components/Timeline.tsx) ----
+   Bottom-centre of the map, in the same shell as the imagery-date pill. Only present when there
+   is more than one moment to move between. */
+.timeline {
+  position: absolute;
+  /* Centred on the map area, not the viewport: the panel takes the left edge. */
+  left: calc(var(--panel-w) + (100vw - var(--panel-w)) / 2);
+  /* Above the basemap switch and the imagery-date pill, so it never collides with either on a
+     narrow window; both keep the bottom edge. */
+  bottom: 92px;
+  transform: translateX(-50%);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(440px, calc(100vw - var(--panel-w) - 520px));
+  min-width: 240px;
+  padding: 8px 12px 8px 8px;
+  border: 1px solid var(--line-2);
+  border-radius: 14px;
+  background: var(--surface-solid);
+  box-shadow: var(--shadow);
+}
+
+.timeline-play {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 999px;
+  font-size: 13px;
+}
+
+.timeline-play[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.timeline-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.timeline-head,
+.timeline-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.timeline-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.timeline-badge {
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--line-2);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+.timeline-badge.is-forecast {
+  color: var(--warning-ink);
+  border-color: var(--warning);
+  background: repeating-linear-gradient(45deg, transparent, transparent 3px, var(--warning-tint) 3px, var(--warning-tint) 5px);
+}
+
+.timeline input[type='range'] {
+  width: 100%;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.timeline-init {
+  color: var(--ink-3);
+}
+
+@media (max-width: 640px) {
+  .timeline {
+    top: 10px;
+    bottom: auto;
+    left: 10px;
+    right: 10px;
+    width: auto;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .timeline input[type='range'] {
+    transition: none;
+  }
+}
+
+/* ---- The view switch, in the panel header ----
+   Two readings of one map. It sits between the title and the header buttons and stays reachable
+   when the panel is collapsed, because collapsing hides the body, not the head. */
+.view-switch {
+  margin-left: auto;
+  flex: none;
+}
+
+.view-switch .seg-btn {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* The header has three things competing for 384px now, so the title yields first. */
+.brand {
+  min-width: 0;
+}
+
+.brand h1 {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---- The Weather card (src/components/WeatherControls.tsx) ---- */
+.wx {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.wx-card {
+  padding-bottom: 10px;
+}
+
+.wx-master {
+  font-weight: 600;
+}
+
+.wx-row .layer-desc {
+  margin: 0 8px 6px 30px;
+}
+
+.wx-row.is-disabled .t-label,
+.wx-row.is-disabled .layer-desc,
+.wx-row.is-disabled .wx-init {
+  color: var(--ink-3);
+}
+
+/* A radio, styled like the toggles beside it: the input stays in the DOM for keyboard use. */
+.radio {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 8px 2px;
+  cursor: pointer;
+}
+
+.radio input[type='radio'] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.radio .dot {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid var(--line-2);
+  border-radius: 999px;
+  background: var(--surface-solid);
+}
+
+.radio input:checked + .dot {
+  border-color: var(--accent);
+  border-width: 4px;
+}
+
+.radio input:focus-visible + .dot {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.radio input:disabled + .dot {
+  opacity: 0.4;
+}
+
+.wx-init {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.wx-both {
+  color: var(--ink-2);
+}
+
+.wx-both .mini-btn {
+  margin-left: 4px;
+}
+
+/* ---- The key for the field, on the map (src/components/MapLegend.tsx) ----
+   On the map rather than in the panel: a forecast has to carry its model and run time wherever it
+   is shown, and this is where it is shown. Stops come from the manifest, so the key and the pixels
+   are the same table. */
+.map-legend {
+  position: absolute;
+  right: 10px;
+  bottom: 96px;
+  z-index: 2;
+  width: 216px;
+  padding: 8px 10px 9px;
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+  background: var(--surface-solid);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  flex: none;
+}
+
+.map-legend-head {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--ink);
+}
+
+.map-legend-sub {
+  margin: 1px 0 6px;
+  font-size: 10.5px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.map-legend-attr {
+  margin: 6px 0 0;
+  font-size: 9.5px;
+  line-height: 1.4;
+  color: var(--ink-3);
+}
+
+.map-legend-note {
+  margin: 4px 0 0;
+  font-size: 9.5px;
+  color: var(--ink-3);
+}
+
+.wind-key {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.wind-key-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10.5px;
+  color: var(--ink-2);
+}
+
+.wind-key-arrow {
+  display: inline-block;
+  width: 20px;
+  color: #1b3a5c;
+  transform: rotate(-90deg);
+  text-align: center;
+}
+
+:root[data-theme='dark'] .wind-key-arrow {
+  color: #9ec5e8;
+}
+
+/* ---- The timeline's model-run stepper ---- */
+.timeline-init {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.timeline-init .icon-btn {
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 999px;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.timeline-init .icon-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.timeline-init-label {
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  /* The timeline takes the top on mobile and the panel sheet takes the bottom, so the key sits
+     directly under the timeline. Keeping the two from overlapping means keeping the timeline one
+     line tall: the span labels wrap at 375px and are the least useful thing there, since the
+     moment being shown is already spelled out above them. The run stepper stays. */
+  .timeline-foot > span:first-child,
+  .timeline-foot > span:last-child {
+    display: none;
+  }
+
+  .timeline-foot {
+    justify-content: center;
+  }
+
+  .map-legend {
+    top: 92px;
+    bottom: auto;
+    right: 10px;
+    width: 168px;
+  }
+
+  .timeline-init-label {
+    font-size: 10px;
+  }
+}

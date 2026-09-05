@@ -330,10 +330,15 @@ async function serveStatic(req, res, urlPath) {
   }
 
   const ext = extname(file).toLowerCase()
-  // Data changes on every pipeline run; hashed assets never change under the same name.
-  const cache = file.includes(`${SITE_DIR}/assets/`)
-    ? 'public, max-age=31536000, immutable'
-    : 'no-cache'
+  // Data changes on every pipeline run; hashed assets never change under the same name. Forecast
+  // field runs are the one exception under /data: a run directory is written once and deleted
+  // when it ages out, never rewritten, so its frames can be cached forever — the timeline's
+  // preload would otherwise warm nothing, and every scrub would refetch. The manifest that lists
+  // the runs stays no-cache.
+  const immutable =
+    file.includes(`${SITE_DIR}/assets/`) ||
+    /\/data\/field\/[^/]+\/[^/]+\/[^/]+$/.test(file.slice(SITE_DIR.length))
+  const cache = immutable ? 'public, max-age=31536000, immutable' : 'no-cache'
   res.writeHead(200, {
     'content-type': MIME[ext] ?? 'application/octet-stream',
     'content-length': info.size,

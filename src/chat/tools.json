@@ -169,7 +169,7 @@
     },
     {
       "name": "weather_forecast",
-      "description": "River discharge and rainfall, past and forecast. THE ONLY FORECAST IN THIS VIEWER — everything else already happened. River discharge is the more useful of the two for flooding, because it integrates rain that fell days ago hundreds of kilometres upstream. Every forward-dated day is flagged isForecast and must be described as a forecast.",
+      "description": "River discharge and rainfall at named gauges and regions, past and forecast — the Open-Meteo POINT forecast (best-match blend). One of two forecast products here: the gridded field on the map is a different model run, read with forecast_field. Say which one you are quoting. River discharge is the more useful of the two for flooding, because it integrates rain that fell days ago hundreds of kilometres upstream. Every forward-dated day is flagged isForecast and must be described as a forecast.",
       "strict": true,
       "input_schema": {
         "type": "object",
@@ -223,7 +223,16 @@
               "floodextentearly",
               "floodextent",
               "inputarea",
-              "exposure"
+              "exposure",
+              "cyclone_observed",
+              "cyclone_forecast",
+              "cyclone_wind",
+              "cyclone_ensemble",
+              "cyclone_cone",
+              "field_precip",
+              "field_prob25",
+              "field_prob50",
+              "field_wind"
             ],
             "description": "One layer kind, or \"all\" for every one of them."
           }
@@ -248,7 +257,10 @@
               "floodextentearly",
               "floodextent",
               "inputarea",
-              "exposure"
+              "exposure",
+              "cyclone_observed",
+              "cyclone_forecast",
+              "cyclone_wind"
             ]
           },
           "visible": {
@@ -629,6 +641,144 @@
           "measure",
           "groupBy",
           "topN"
+        ]
+      }
+    },
+    {
+      "name": "cyclone_tracks",
+      "description": "Tropical cyclones being tracked near Myanmar: observed track (IBTrACS provisional best track) and the JTWC official forecast track at 12–120 h, with winds in kt and km/h, pressure, and 34/50/64 kt wind radii. The forecast points are forecasts, not observations, and a track forecast is not a landfall prediction — report positions, lead times and the stated position accuracy; never say where a storm will hit.",
+      "strict": true,
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "storm": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A storm name to filter to, or null for every storm in the box."
+          },
+          "include": {
+            "type": "string",
+            "enum": [
+              "observed",
+              "forecast",
+              "both"
+            ],
+            "description": "Which part of each track to return. Prefer both."
+          }
+        },
+        "required": [
+          "storm",
+          "include"
+        ]
+      }
+    },
+    {
+      "name": "forecast_field",
+      "description": "The gridded weather forecast drawn on the map in the Weather view, read at named towns and river gauges. Rainfall per three-hour step (mm), 10 m wind (km/h and m/s), or the share of the 51 ECMWF ensemble members over 25 or 50 mm. A FORECAST, not an observation: always name the model, and its run initialisation time where one is published — GFS and ICON publish none through Open-Meteo, and that must be said rather than guessed.",
+      "strict": true,
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "model": {
+            "type": "string",
+            "enum": [
+              "ecmwf",
+              "gfs",
+              "icon"
+            ],
+            "description": "ecmwf is the default and the only one with a published run time."
+          },
+          "layer": {
+            "type": "string",
+            "enum": [
+              "precip",
+              "prob25",
+              "prob50",
+              "wind"
+            ],
+            "description": "prob25 and prob50 come from the 51-member ECMWF ensemble whichever model is named."
+          },
+          "place": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A town or gauge name to filter to, or null for all of them."
+          },
+          "validTime": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "ISO time to read, or null for the next few steps."
+          }
+        },
+        "required": [
+          "model",
+          "layer",
+          "place",
+          "validTime"
+        ]
+      }
+    },
+    {
+      "name": "set_view_timeline",
+      "description": "Move the reader's view: switch between the Floods and Weather readings of the map, move the timeline to a moment, start or stop playback, and choose the forecast model and layer. Returns the moment actually shown, which may be the nearest one the data covers.",
+      "strict": true,
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "view": {
+            "type": "string",
+            "enum": [
+              "floods",
+              "weather",
+              "keep"
+            ],
+            "description": "keep leaves the current view alone."
+          },
+          "validTime": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "ISO time to move the timeline to, or null to leave it."
+          },
+          "play": {
+            "type": "boolean",
+            "description": "Start or stop stepping through time."
+          },
+          "model": {
+            "type": "string",
+            "enum": [
+              "ecmwf",
+              "gfs",
+              "icon",
+              "keep"
+            ]
+          },
+          "layer": {
+            "type": "string",
+            "enum": [
+              "precip",
+              "prob25",
+              "prob50",
+              "wind",
+              "keep"
+            ]
+          }
+        },
+        "required": [
+          "view",
+          "validTime",
+          "play",
+          "model",
+          "layer"
         ]
       }
     }

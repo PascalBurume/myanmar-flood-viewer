@@ -27,7 +27,29 @@ import { riverFacts, sortedRain, sortedRivers, type WeatherDoc } from '../compon
 import { freshness, liveAlerts, parseRunProgress, pollRun, stepsFromStatus, type StatusDoc } from '../pipeline'
 import { LAYER_KINDS, datasetName, type DataIndex, type KindKey } from '../layers'
 import type { Basemap } from '../basemap'
+
+// Data paths are relative to wherever the site is mounted, as everywhere else.
+const BASE_URL = import.meta.env.BASE_URL
 import type { RainState } from '../components/Panel'
+import {
+  FIELD_LAYERS,
+  FIELD_MODELS,
+  activeRun,
+  runsFor,
+  type FieldLayer,
+  type FieldManifest,
+  type FieldModelKey,
+  type FieldState,
+} from '../forecastField'
+import {
+  CYCLONE_LAYERS,
+  categoryLabel,
+  ktToKmh,
+  trackSamples,
+  type CycloneDoc,
+  type CycloneLayerKey,
+  type CycloneShow,
+} from '../cyclones'
 
 /** Everything a tool can do to the map. Supplied by App, which owns the state they mutate. */
 export interface ChatActions {
@@ -40,6 +62,11 @@ export interface ChatActions {
   setBasemap: (b: Basemap) => void
   setImageryDate: (d: string) => void
   setRain: (r: RainState) => void
+  setCycloneLayer: (layer: CycloneLayerKey, visible: boolean) => void
+  setView: (view: 'floods' | 'weather') => void
+  setValidTime: (t: string) => void
+  setPlaying: (on: boolean) => void
+  setField: (patch: Partial<FieldState>) => void
 }
 
 /**
@@ -62,6 +89,11 @@ export interface ChatMapState {
   rain: RainState
   kindVisible: Record<string, boolean>
   kindOpacity: Record<string, number>
+  cycloneShow: CycloneShow
+  view: 'floods' | 'weather'
+  field: FieldState
+  /** Every moment the timeline can show, so a tool lands on one that exists. */
+  frames: Array<{ t: string; isForecast: boolean }>
 }
 
 export interface ChatContext {
@@ -70,6 +102,8 @@ export interface ChatContext {
   status: StatusDoc | null
   history: History | null
   weather: WeatherDoc | null
+  cyclones: CycloneDoc | null
+  fieldManifest: FieldManifest | null
   map: ChatMapState & { query: ChatMapQuery }
   actions: ChatActions
 }
@@ -526,12 +560,34 @@ const HANDLERS = {
           opacity: ctx.map.kindOpacity[k.key] ?? null,
           clickable: k.query,
         })),
+        // The cyclone layers, keyed `cyclone_<key>` so they share the enum with the flood kinds.
+        cycloneLayers: CYCLONE_LAYERS.filter((l) => !wanted || `cyclone_${l.key}` === wanted).map((l) => ({
+          key: `cyclone_${l.key}`,
+          label: l.label,
+          description: l.desc,
+          visible: !l.needs && (ctx.map.cycloneShow[l.key] ?? false),
+          available: !l.needs,
+          needs: l.needs ?? null,
+        })),
+        // The forecast field's layers, keyed `field_<key>` so they share the one enum.
+        fieldLayers: FIELD_LAYERS.filter((l) => !wanted || `field_${l.key}` === wanted).map((l) => ({
+          key: `field_${l.key}`,
+          label: l.label,
+          description: l.desc,
+          visible: ctx.map.field.on && ctx.map.field.layer === l.key,
+          model: ctx.map.field.model,
+          modelInit: activeRun(ctx.fieldManifest, ctx.map.field)?.init ?? null,
+        })),
+        view: ctx.map.view,
         basemap: ctx.map.basemap,
         imageryDate: ctx.map.imageryDate,
         rain: ctx.map.rain,
       },
       dataset: 'this viewer’s layer definitions',
-      caveats: ['No flood layer in this viewer carries depth. Every one is a flat colour for that reason.'],
+      caveats: [
+        'No flood layer in this viewer carries depth. Every one is a flat colour for that reason.',
+        'Cyclone layers marked available:false need WeatherNext 3 ensemble members, which are not configured; say so rather than turning them on.',
+      ],
     })
   },
 
@@ -738,10 +794,18 @@ const HANDLERS = {
   // ---- map control ----------------------------------------------------------------------------
 
   set_layer_visibility(input, ctx) {
-    const kind = String(input.kind) as KindKey
-    if (!LAYER_KINDS.some((k) => k.key === kind)) throw new Error(`no such layer: ${kind}`)
+    const kind = String(input.kind)
     const visible = Boolean(input.visible)
-    ctx.actions.setKindVisible(kind, visible)
+    if (kind.startsWith('cyclone_')) {
+      const key = kind.slice('cyclone_'.length) as CycloneLayerKey
+      const layer = CYCLONE_LAYERS.find((l) => l.key === key)
+      if (!layer) throw new Error(`no such layer: ${kind}`)
+      if (layer.needs) throw new Error(`${layer.label} cannot be shown: it ${layer.needs}.`)
+      ctx.actions.setCycloneLayer(key, visible)
+      return env({ data: { ok: true, kind, visible }, dataset: 'map state', caveats: [] })
+    }
+    if (!LAYER_KINDS.some((k) => k.key === kind)) throw new Error(`no such layer: ${kind}`)
+    ctx.actions.setKindVisible(kind as KindKey, visible)
     return env({ data: { ok: true, kind, visible }, dataset: 'map state', caveats: [] })
   },
 
@@ -835,6 +899,208 @@ const HANDLERS = {
       dataset: 'NASA GIBS / GPM IMERG',
       observedAt: date,
       caveats: ['This is measured rainfall that already fell, not a forecast.'],
+    })
+  },
+
+  /**
+   * Tropical cyclones: where each storm has been and where JTWC forecasts it to go.
+   *
+   * Two honesty rules are structural here. Winds come back in kt *and* km/h, because the grounding
+   * check looks for every number the answer quotes in some tool result, and a model that converts
+   * 65 kt to 120 km/h in prose would otherwise be flagged for inventing a figure. And the observed
+   * track is decimated to six-hourly points: enough to describe the path, not so many that the
+   * result is a wall of coordinates the model paraphrases loosely.
+   */
+  cyclone_tracks(input, ctx) {
+    const doc = ctx.cyclones
+    if (!doc) {
+      return env({
+        data: { storms: [], reason: 'no cyclone file — the pipeline has not run this stage' },
+        dataset: 'IBTrACS ACTIVE (NOAA NCEI) · JTWC warnings',
+        caveats: ['No storms are listed because no file exists, not because the sea is calm.'],
+      })
+    }
+    const wanted = typeof input.storm === 'string' && input.storm.trim() ? input.storm.trim().toLowerCase() : null
+    const include = input.include === 'observed' || input.include === 'forecast' ? input.include : 'both'
+    const storms = doc.storms.filter((s) => !wanted || s.name.toLowerCase().includes(wanted) || s.sid.toLowerCase() === wanted)
+    const kmh = (kt: number | null) => (kt === null ? null : ktToKmh(kt))
+    const point = (p: { t: string; lat: number; lon: number; windKt: number | null }) => ({
+      t: p.t, lat: p.lat, lon: p.lon, windKt: p.windKt, windKmh: kmh(p.windKt), category: categoryLabel(null, p.windKt),
+    })
+    const data = storms.map((s) => {
+      const last = s.observed[s.observed.length - 1] ?? null
+      const sixHourly = s.observed.filter((p) => /T(00|06|12|18):00/.test(p.t))
+      return {
+        name: s.name,
+        basin: s.basin === 'NI' ? 'North Indian Ocean (Bay of Bengal)' : 'West Pacific',
+        sid: s.sid,
+        lastObserved: s.lastObserved,
+        peakWindKt: s.peakWindKt,
+        peakWindKmh: kmh(s.peakWindKt),
+        latest: last ? { ...point(last), presHpa: last.presHpa, source: last.trackType ?? 'observed' } : null,
+        observed: include === 'forecast' ? undefined : (sixHourly.length ? sixHourly : s.observed).map((p) => ({ ...point(p), presHpa: p.presHpa, r34Nm: p.r34, r50Nm: p.r50, r64Nm: p.r64 })),
+        forecast: include === 'observed' || !s.forecast ? null : {
+          agency: s.forecast.agency,
+          issued: s.forecast.issued,
+          product: s.forecast.product,
+          url: s.forecast.url,
+          analysedPosition: { ...point(s.forecast.warning), accuracyNm: s.forecast.warning.accuracyNm },
+          points: s.forecast.points.map((p) => ({ tauH: p.tauH, ...point(p), r34Nm: p.r34, r50Nm: p.r50, r64Nm: p.r64, dissipating: p.dissipating ?? false, isForecast: true })),
+        },
+      }
+    })
+    const observedAt = storms.map((s) => s.lastObserved ?? '').sort().pop() || null
+    const e: Envelope = {
+      data: { box: doc.box, retainDays: doc.retainDays, note: doc.note, storms: data, sources: doc.sources },
+      dataset: doc.attribution,
+      observedAt,
+      generatedAt: doc.generatedAt,
+      caveats: [
+        'Forecast points are the JTWC official forecast, not observations. Name the issue time and the lead (tauH) whenever you quote one.',
+        'Observed positions are provisional best track and are revised as the storm is re-analysed.',
+        'A track forecast is not a landfall prediction. Report where the forecast puts the centre and its stated position accuracy; never say where it will hit or what it will do on land.',
+        'Wind radii are the largest extent of that wind in each quadrant, in nautical miles — not a wind field.',
+        'A storm absent from this list was not being tracked inside the box, which is not the same as calm weather.',
+      ],
+    }
+    const first = storms[0]
+    const series = first ? trackSamples(first).filter((p) => p.windKt !== null).map((p) => ({ label: p.t.slice(5, 16).replace('T', ' '), value: p.windKt as number, forecast: p.isForecast })) : []
+    if (series.length > 1 && storms.length === 1) {
+      return withChart(
+        { chart: 'series', title: `${first.name} — max sustained wind`, unit: 'kt', rows: series, source: `${doc.attribution}, observed to ${first.lastObserved ?? '—'}`, auto: true },
+        e,
+      )
+    }
+    return env(e)
+  },
+
+  /**
+   * The gridded forecast field, read at the named points rather than off the map.
+   *
+   * `points.json` exists so this never has to sample a pixel: the numbers the assistant quotes and
+   * the blocks the reader sees come from the same run, but the numbers arrive as numbers. Wind is
+   * returned in km/h and m/s together for the same reason `cyclone_tracks` returns kt and km/h —
+   * a converted figure in prose must still be findable in a tool result.
+   */
+  async forecast_field(input, ctx) {
+    const manifest = ctx.fieldManifest
+    if (!manifest) throw new Error('there is no forecast field — the pipeline has not run that stage')
+    const layer = (['precip', 'prob25', 'prob50', 'wind'] as const).includes(input.layer as FieldLayer)
+      ? (input.layer as FieldLayer)
+      : 'precip'
+    // Only the three that have data: WeatherNext is a listed model but not a fetchable one.
+    const DETERMINISTIC = ['ecmwf', 'gfs', 'icon'] as const
+    const model: (typeof DETERMINISTIC)[number] = DETERMINISTIC.includes(input.model as (typeof DETERMINISTIC)[number])
+      ? (input.model as (typeof DETERMINISTIC)[number])
+      : 'ecmwf'
+    const runs = runsFor(manifest, model, layer)
+    const run = runs[0]
+    if (!run) throw new Error(`no run on disk for ${model}`)
+    const modelKey = layer === 'prob25' || layer === 'prob50' ? 'ecmwf-ens' : model
+    const label = manifest.models.find((m) => m.key === modelKey)?.label ?? modelKey
+
+    const res = await fetch(`${BASE_URL}data/field/${run.points}`)
+    if (!res.ok) throw new Error('the run’s point values could not be read')
+    const doc = (await res.json()) as {
+      label: string
+      init: string | null
+      fetchedAt: string
+      members?: number
+      cellDeg: number
+      points: Array<{ name: string; lat: number; lon: number; cell?: number[]; steps: Array<Record<string, number | string | null>> }>
+    }
+    const wanted = typeof input.place === 'string' && input.place.trim() ? input.place.trim().toLowerCase() : null
+    const places = doc.points.filter((p) => !wanted || p.name.toLowerCase().includes(wanted))
+    if (!places.length) throw new Error(`no forecast point matches "${String(input.place)}"`)
+    const at = typeof input.validTime === 'string' && input.validTime ? input.validTime : null
+    const pick = (steps: Array<Record<string, number | string | null>>) => {
+      if (!at) return steps.slice(0, 8)
+      let best = steps[0]
+      let bestDt = Infinity
+      for (const st of steps) {
+        const dt = Math.abs(Date.parse(String(st.valid)) - Date.parse(at))
+        if (dt < bestDt) {
+          best = st
+          bestDt = dt
+        }
+      }
+      return bestDt <= 3 * 3600 * 1000 ? [best] : []
+    }
+    const isProb = layer === 'prob25' || layer === 'prob50'
+    return env({
+      data: {
+        model: label,
+        init: doc.init,
+        initPublished: Boolean(doc.init),
+        fetchedAt: doc.fetchedAt,
+        layer,
+        unit: isProb ? '% of members' : layer === 'wind' ? 'km/h' : 'mm per 3 h',
+        cellDegrees: doc.cellDeg,
+        members: doc.members ?? null,
+        places: places.map((p) => ({ name: p.name, lat: p.lat, lon: p.lon, cell: p.cell ?? null, steps: pick(p.steps) })),
+      },
+      dataset: `Open-Meteo (CC BY 4.0) · ${label}`,
+      generatedAt: doc.init ?? doc.fetchedAt,
+      caveats: [
+        'This is a FORECAST, not an observation. Say so, and name the model.',
+        doc.init
+          ? 'Name the run initialisation time whenever you quote a figure from it.'
+          : 'This model publishes no run initialisation time through Open-Meteo. Say "run time not published"; never state or guess one.',
+        `Each value is the model's ${doc.cellDeg}° cell containing the point — about 55 km across — not the town itself.`,
+        'Rainfall is the total over a three-hour step, not an hourly rate.',
+        isProb
+          ? 'A probability here is the share of the 51 ensemble members over the threshold: a spread of opinion, not a calibrated chance.'
+          : 'A single model run is one opinion; the probability layers show how much the 51 ensemble members disagree.',
+        'No local calibration. For warnings, refer the reader to the Myanmar Department of Meteorology and Hydrology.',
+      ],
+    })
+  },
+
+  /** Move the reader's view: which mode, which moment, which model and layer. */
+  set_view_timeline(input, ctx) {
+    const view = input.view === 'floods' || input.view === 'weather' ? input.view : null
+    if (view) ctx.actions.setView(view)
+    const patch: Partial<FieldState> = {}
+    if (input.model !== 'keep' && FIELD_MODELS.some((m) => m.key === input.model && !m.needs)) {
+      patch.model = input.model as FieldModelKey
+    }
+    if (input.layer !== 'keep' && FIELD_LAYERS.some((l) => l.key === input.layer)) {
+      patch.layer = input.layer as FieldLayer
+    }
+    if (view === 'weather') patch.on = true
+    if (Object.keys(patch).length) ctx.actions.setField(patch)
+    ctx.actions.setPlaying(Boolean(input.play))
+
+    // Land on a moment that exists rather than one the reader asked for approximately: the frames
+    // are the same list the timeline itself is drawn from.
+    let chosen: string | null = null
+    if (typeof input.validTime === 'string' && input.validTime && ctx.map.frames.length) {
+      let bestDt = Infinity
+      for (const f of ctx.map.frames) {
+        const dt = Math.abs(Date.parse(f.t) - Date.parse(input.validTime))
+        if (dt < bestDt) {
+          chosen = f.t
+          bestDt = dt
+        }
+      }
+      if (chosen) ctx.actions.setValidTime(chosen)
+    }
+    const frame = ctx.map.frames.find((f) => f.t === chosen)
+    return env({
+      data: {
+        ok: true,
+        view: view ?? ctx.map.view,
+        model: patch.model ?? ctx.map.field.model,
+        layer: patch.layer ?? ctx.map.field.layer,
+        requestedTime: input.validTime ?? null,
+        frameChosen: chosen,
+        isForecast: frame?.isForecast ?? null,
+        playing: Boolean(input.play),
+      },
+      dataset: 'map state',
+      caveats: chosen && input.validTime && chosen !== input.validTime
+        ? ['The timeline only holds the moments the data covers, so it moved to the nearest one. Quote the moment actually shown.']
+        : [],
     })
   },
 

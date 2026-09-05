@@ -77,6 +77,9 @@ PLAN = [
     ('adam', 'WFP ADAM impact'),
     ('history', 'Flood history'),
     ('weather', 'Rain & rivers'),
+    ('cyclones', 'Tropical cyclones'),
+    ('field', 'Forecast field'),
+    ('weathernext', 'WeatherNext 3 field'),
     ('publish', 'Build & publish'),
     ('status', 'Write status'),
 ]
@@ -225,6 +228,73 @@ def stage_weather(stages: list[Stage]) -> None:
     st.finish('ok', wrote.replace('wrote weather.json: ', '') or 'refreshed')
 
 
+def stage_cyclones(stages: list[Stage]) -> None:
+    """Tropical cyclone tracks, observed (IBTrACS) and forecast (JTWC).
+
+    Both sources are public and keyless, fetched here so the page still contacts nothing but its own
+    files. Optional in the same sense as the weather: a flood map is complete without a storm on it,
+    so a source outage records `skipped` rather than failing the run. An empty box is a normal
+    outcome and is `ok` — quiet is an answer.
+    """
+    st = Stage('cyclones', 'Tropical cyclone tracks')
+    stages.append(st)
+    proc = run([sys.executable, 'scripts/scan_cyclones.py'])
+    out = (proc.stdout or '') + (proc.stderr or '')
+    print(out.rstrip())
+    if proc.returncode != 0:
+        st.finish('skipped', 'cyclone sources unavailable; the flood data is unaffected')
+        return
+    wrote = next((l for l in out.splitlines() if l.startswith('wrote cyclones.json')), '')
+    st.finish('ok', wrote.replace('wrote cyclones.json: ', '') or 'refreshed')
+
+
+def stage_field(stages: list[Stage]) -> None:
+    """The gridded forecast field for the Weather view — Open-Meteo, keyless, never fatal.
+
+    A model that cannot be fetched is named in the detail and the others are still written; a run
+    that finds every model's current run already on disk is `ok` with "nothing new fetched", which
+    is also what keeps a hand-clicked update from spending the daily call budget. Only a run that
+    leaves no field at all records `skipped`, with the scanner's own reason.
+    """
+    st = Stage('field', 'Forecast field (Open-Meteo)')
+    stages.append(st)
+    proc = run([sys.executable, 'scripts/scan_forecast_field.py'])
+    out = (proc.stdout or '') + (proc.stderr or '')
+    print(out.rstrip())
+    skipped = next((l for l in out.splitlines() if l.startswith('skipped:')), '')
+    if skipped:
+        st.finish('skipped', skipped.replace('skipped: ', ''))
+        return
+    if proc.returncode != 0:
+        st.finish('skipped', 'forecast field unavailable; the flood data is unaffected')
+        return
+    wrote = next((l for l in out.splitlines() if l.startswith('wrote field:')), '')
+    st.finish('ok', wrote.replace('wrote field: ', '') or 'refreshed')
+
+
+def stage_weathernext(stages: list[Stage]) -> None:
+    """The WeatherNext 3 forecast field — gated on credentials, libraries and accepted terms.
+
+    `scan_weathernext.py` prints one `skipped: <reason>` line when anything it needs is missing,
+    which is the normal state until Google's allow-list access exists. That reason becomes the
+    stage detail, so the panel says exactly what is missing rather than that something failed.
+    """
+    st = Stage('weathernext', 'WeatherNext 3 forecast field')
+    stages.append(st)
+    proc = run([sys.executable, 'scripts/scan_weathernext.py'])
+    out = (proc.stdout or '') + (proc.stderr or '')
+    print(out.rstrip())
+    skipped = next((l for l in out.splitlines() if l.startswith('skipped:')), '')
+    if skipped:
+        st.finish('skipped', skipped.replace('skipped: ', ''))
+        return
+    if proc.returncode != 0:
+        st.finish('skipped', 'WeatherNext stage did not complete; the flood data is unaffected')
+        return
+    wrote = next((l for l in out.splitlines() if l.startswith('wrote wn3')), '')
+    st.finish('ok', wrote.replace('wrote ', '') or 'refreshed')
+
+
 def stage_unosat(stages: list[Stage]) -> None:
     # Recorded as a stage even though nothing runs, so the tree says why it is not automated
     # rather than leaving a silent hole where a source used to be.
@@ -346,6 +416,9 @@ def main() -> int:
         if not args.dry_run:
             stage_history(stages)
             stage_weather(stages)
+            stage_cyclones(stages)
+            stage_field(stages)
+            stage_weathernext(stages)
     else:
         floodai_state = adam_state = 'skipped'
 

@@ -33,6 +33,7 @@ import sys
 from common import INDEX_PATH
 
 HISTORY_PATH = INDEX_PATH.parent / 'history.json'
+CYCLONES_PATH = INDEX_PATH.parent / 'cyclones.json'
 
 # How much worse than the recent norm counts as a surge. Compared against the *median* of the
 # preceding passes rather than the mean, because a single large event in the window would drag a
@@ -122,9 +123,44 @@ def from_history() -> list[dict]:
     return out
 
 
+def from_cyclones() -> list[dict]:
+    """A storm in the wider box is worth recording; a forecast point over Myanmar is worth a look.
+
+    The warning quotes the forecast position and its issue time and nothing else. It is JTWC's
+    forecast, not a landfall call — the file's own note says so, and so does this line.
+    """
+    doc = read(CYCLONES_PATH)
+    out = []
+    w, s, e, n = doc.get('myanmarBox') or (88, 9, 102, 29)
+    for storm in doc.get('storms', []):
+        fc = storm.get('forecast') or {}
+        over = [p for p in fc.get('points', []) if s <= p['lat'] <= n and w <= p['lon'] <= e]
+        obs = storm.get('observed') or []
+        last = obs[-1] if obs else None
+        if over:
+            p = over[0]
+            out.append(alert(
+                'cyclone-forecast', 'warning',
+                f"{storm['name'].title()} — JTWC forecast track crosses Myanmar",
+                f"Forecast position {p['lat']:.1f}N {p['lon']:.1f}E at {p['t']} "
+                f"(+{p['tauH']} h, {p.get('windKt') or '?'} kt), issued {fc.get('issued')}. "
+                "A track forecast, not a landfall prediction.",
+                storm=storm['sid'], issued=fc.get('issued'),
+            ))
+        elif last:
+            out.append(alert(
+                'cyclone', 'info',
+                f"{storm['name'].title()} — tropical cyclone being tracked",
+                f"{storm['basin']} basin, last observed {last['t']} at {last['lat']:.1f}N "
+                f"{last['lon']:.1f}E, {last.get('windKt') or '?'} kt.",
+                storm=storm['sid'], observedAt=last['t'],
+            ))
+    return out
+
+
 def build(sources: dict) -> dict:
     """The alerts block written into status.json."""
-    items = from_sources(sources) + from_history()
+    items = from_sources(sources) + from_history() + from_cyclones()
     rank = {'critical': 0, 'warning': 1, 'info': 2}
     items.sort(key=lambda a: rank.get(a['severity'], 9))
     return {

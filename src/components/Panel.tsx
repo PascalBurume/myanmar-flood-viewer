@@ -16,6 +16,10 @@ import { TopAffected, nationalTotals, observedRange, type Place } from './TopAff
 import { Assistant } from './chat/Assistant'
 import type { ChatContext } from '../chat/tools'
 import { Trend, type History } from './Trend'
+import { Cyclones } from './Cyclones'
+import { WeatherControls } from './WeatherControls'
+import type { FieldState } from '../forecastField'
+import type { CycloneDoc, CycloneLayerKey, CycloneShow, Storm } from '../cyclones'
 import { Weather, type WeatherDoc } from './Weather'
 import { defaultRainDate } from '../basemap'
 
@@ -376,6 +380,16 @@ export function Panel({
   weather,
   rain,
   onRain,
+  cyclones,
+  cycloneShow,
+  onCycloneShow,
+  validTime,
+  onZoomStorm,
+  view,
+  onView,
+  field,
+  onField,
+  weathernextReason,
   chat,
   onRunPipeline,
   runBusy,
@@ -403,6 +417,16 @@ export function Panel({
   weather: WeatherDoc | null
   rain: RainState
   onRain: (v: RainState) => void
+  cyclones: CycloneDoc | null
+  cycloneShow: CycloneShow
+  onCycloneShow: (k: CycloneLayerKey, v: boolean) => void
+  validTime: string | null
+  onZoomStorm: (storm: Storm) => void
+  view: 'floods' | 'weather'
+  onView: (v: 'floods' | 'weather') => void
+  field: FieldState
+  onField: (patch: Partial<FieldState>) => void
+  weathernextReason: string | null
   chat: ChatContext
   onRunPipeline: () => void
   runBusy: boolean
@@ -427,6 +451,22 @@ export function Panel({
             🌊
           </span>
           <h1>Myanmar Floods</h1>
+        </div>
+        {/* One map, two readings of it: what the water has done, and what the weather is about to
+            do. Kept in the header so it stays reachable when the panel is collapsed. */}
+        <div className="view-switch seg" role="tablist" aria-label="View">
+          {(['floods', 'weather'] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              role="tab"
+              className={`seg-btn${view === v ? ' is-on' : ''}`}
+              aria-selected={view === v}
+              onClick={() => onView(v)}
+            >
+              {v === 'floods' ? 'Floods' : 'Weather'}
+            </button>
+          ))}
         </div>
         <div className="head-actions">
           {/* Always reachable, and now load-bearing: the assistant can move the camera, and the map
@@ -474,14 +514,47 @@ export function Panel({
             aria-controls={`panel-${key}`}
             onClick={() => setTab(key)}
           >
-            {key === 'layers' ? 'Layers' : 'Assistant'}
+            {key === 'layers' ? (view === 'weather' ? 'Controls' : 'Layers') : 'Assistant'}
           </button>
         ))}
       </div>
 
       {/* Both panes stay mounted and are hidden rather than unmounted. Remounting would reset the
           layers scroll position and re-fire Trend's scroll-to-right effect on every tab switch. */}
-      <div className="panel-body" id="panel-layers" role="tabpanel" aria-labelledby="tab-layers" hidden={tab !== 'layers'}>
+      {/* A third pane rather than swapped contents: it is a `panel-body` like the others, so the
+            [hidden] override and the collapsed-panel rule already cover it, and each view keeps its
+            own scroll position across a switch. */}
+      <div
+          className="panel-body"
+          id="panel-weather"
+          role="tabpanel"
+          aria-labelledby="tab-layers"
+          hidden={view !== 'weather' || tab !== 'layers'}
+        >
+          <Field label="Weather">
+            <WeatherControls
+              field={field}
+              onField={onField}
+              rain={rain}
+              onRain={onRain}
+              weathernextReason={weathernextReason}
+            />
+          </Field>
+
+          <Field label="Tropical cyclones">
+            <Cyclones
+              doc={cyclones}
+              show={cycloneShow}
+              onShow={onCycloneShow}
+              validTime={validTime}
+              onZoomStorm={onZoomStorm}
+            />
+          </Field>
+
+          <Field label="Data &amp; updates">{pipelineSummary}</Field>
+        </div>
+
+      <div className="panel-body" id="panel-layers" role="tabpanel" aria-labelledby="tab-layers" hidden={view !== 'floods' || tab !== 'layers'}>
         <p className="notice">
           Two things at once. <strong>Nationwide</strong>: UNOSAT's AI detector over Sentinel-1,
           giving people exposed per township for the whole country, days old. <strong>Four
@@ -538,6 +611,16 @@ export function Panel({
 
         <Field label="Rainfall on the map">
           <RainControl rain={rain} onRain={onRain} />
+        </Field>
+
+        <Field label="Tropical cyclones">
+          <Cyclones
+            doc={cyclones}
+            show={cycloneShow}
+            onShow={onCycloneShow}
+            validTime={validTime}
+            onZoomStorm={onZoomStorm}
+          />
         </Field>
 
         {weather ? (
