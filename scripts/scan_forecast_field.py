@@ -106,11 +106,16 @@ ENS = ('ecmwf-ens', 'ECMWF IFS 0.25° ensemble, 51 members', 'ecmwf_ifs025')
 PROB_THRESHOLDS = (25, 50)
 
 # The one table behind both the pixels and the key on the map. Stops are lower bounds.
+#
+# The rain greens follow Google Weather Lab's — lime through forest green, then yellow, orange and
+# red — rather than the pale ColorBrewer mint they replaced, which washed out over a light basemap.
+# Changing a colour here is safe for runs already on disk: the client reads each pixel's palette
+# *index*, which is the class, and paints it from this table.
 LEGENDS = {
     'precip3h': {
         'unit': 'mm / 3 h',
-        'stops': [[0.5, '#c7e9c0'], [2, '#74c476'], [5, '#31a354'], [10, '#006d2c'],
-                  [20, '#ffff66'], [35, '#fdae61'], [50, '#f46d43'], [75, '#d73027']],
+        'stops': [[0.5, '#b6e880'], [2, '#7fcf53'], [5, '#4caf3c'], [10, '#2e7d32'],
+                  [20, '#f4e842'], [35, '#f9a73e'], [50, '#ef5b33'], [75, '#c5221f']],
     },
     'prob': {
         'unit': '% of 51 members',
@@ -120,8 +125,8 @@ LEGENDS = {
 }
 
 ATTRIBUTION = 'Open-Meteo (CC BY 4.0) · ECMWF / NOAA / DWD'
-NOTE = ('Forecasts, not observations. Global models at 0.25° sampled on a 0.5° grid (about 55 km): '
-        'the blocks are the sampling, not the weather. Rainfall is the total of each 3-hour step. '
+NOTE = ('Forecasts, not observations. Global models at 0.25° sampled on a 0.5° grid (about 55 km); '
+        'anything finer on the map is drawn between samples, not forecast. Rainfall is the total of each 3-hour step. '
         'Probabilities are the share of the 51 ECMWF ensemble members over a threshold, not a '
         'calibrated certainty. No local calibration. For warnings, refer to the Myanmar Department '
         'of Meteorology and Hydrology.')

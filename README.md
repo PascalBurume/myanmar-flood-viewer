@@ -455,9 +455,13 @@ nothing for GFS or ICON, so those say **"run time not published"** everywhere th
 model list, on the legend and in every assistant answer. A forecast without its run time is
 undated, and this project does not print undated figures; it also does not invent one.
 
-**The blocks are the sampling, not the weather.** A 0.25° global model read on a 0.5° grid, about
-55 km a cell, drawn with nearest-neighbour resampling so the cells stay square. Smoothing them
-would draw detail the model does not have.
+**Smooth by default, blocks on request.** A 0.25° global model read on a 0.5° grid, about 55 km
+a cell. Drawn as squares it read as a mosaic, so by default the classes are interpolated between
+sample centres onto a surface ten times finer and cut back into the key's classes — the organic
+look of Weather Lab's rain, in a Weather Lab palette of lime to forest green, then yellow, orange
+and red. Shapes finer than 55 km are drawn, not forecast, and the panel says so; **Blocks** shows
+the samples themselves. **Density** (in the panel and on the key) sets how strongly the forecast is
+drawn over the map, and the key's eye button hides it.
 
 **Runs are kept on disk** — the newest eight per model — because Open-Meteo serves only the latest,
 and the timeline's `‹ Init. ›` stepper exists to compare the same moment forecast from different

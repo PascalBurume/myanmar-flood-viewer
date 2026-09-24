@@ -78,8 +78,8 @@ export function Timeline({
   onInitStep?: (dir: -1 | 1) => void
   /** The newest observation; anything after it is forecast. */
   observedUntil: string | null
-  /** URLs worth warming for the frames either side of the current one. */
-  preload?: (t: string) => string[]
+  /** Warm whatever the frame at a moment needs, so stepping to it is a cache hit. */
+  preload?: (t: string) => void
   /** One cell per frame, or empty when there is nothing to draw. */
   strip?: StripCell[]
   /** Hours from the run's init to the moment shown — only where the init is published. */
@@ -139,11 +139,7 @@ export function Timeline({
     if (!preload || index < 0) return
     for (const j of [index - 1, index + 1, index + 2, index + 3]) {
       const f = frames[j]
-      if (!f) continue
-      for (const url of preload(f.t)) {
-        const img = new Image()
-        img.src = url
-      }
+      if (f) preload(f.t)
     }
   }, [preload, frames, index])
 

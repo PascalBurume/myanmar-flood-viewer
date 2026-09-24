@@ -42,6 +42,7 @@ import {
 } from './cyclones'
 import { formatMMT as formatTime } from './time'
 import { seriesAt, seriesPopupHtml } from './fieldSample'
+import { frameSource } from './fieldRender'
 import { useExposure } from './components/TopAffected'
 import { useHistory } from './components/Trend'
 import { Alerts } from './components/Alerts'
@@ -113,6 +114,7 @@ export function App({ initialIndex }: { initialIndex: DataIndex }) {
   const [fieldLayer, setFieldLayer] = useState<FieldState['layer']>('precip')
   const [fieldRun, setFieldRun] = useState<string | null>(null)
   const [fieldOpacity, setFieldOpacity] = useState(0.75)
+  const [fieldStyle, setFieldStyle] = useState<FieldState['style']>('smooth')
   /**
    * The timeline. `validTime` is the moment the map shows; null means "the newest observation",
    * which is what the map opens on and what a reader who never touches the scrubber sees.
@@ -218,8 +220,8 @@ export function App({ initialIndex }: { initialIndex: DataIndex }) {
   const cyclonesState = useMemo(() => ({ doc: cyclones, show: cycloneShow }), [cyclones, cycloneShow])
   const observedTo = useMemo(() => observedUntil(cyclones), [cyclones])
   const fieldBase = useMemo(
-    () => ({ manifest: fieldManifest, on: fieldOn, model: fieldModel, run: fieldRun, layer: fieldLayer, opacity: fieldOpacity, wind: null }),
-    [fieldManifest, fieldOn, fieldModel, fieldRun, fieldLayer, fieldOpacity],
+    () => ({ manifest: fieldManifest, on: fieldOn, model: fieldModel, run: fieldRun, layer: fieldLayer, opacity: fieldOpacity, style: fieldStyle, wind: null }),
+    [fieldManifest, fieldOn, fieldModel, fieldRun, fieldLayer, fieldOpacity, fieldStyle],
   )
   const fieldRunDoc = useMemo(() => activeRun(fieldManifest, fieldBase), [fieldManifest, fieldBase])
   const windDoc = useWindDoc(BASE_URL, fieldRunDoc, fieldOn && fieldLayer === 'wind')
@@ -230,6 +232,7 @@ export function App({ initialIndex }: { initialIndex: DataIndex }) {
     if (patch.layer !== undefined) setFieldLayer(patch.layer)
     if (patch.run !== undefined) setFieldRun(patch.run)
     if (patch.opacity !== undefined) setFieldOpacity(patch.opacity)
+    if (patch.style !== undefined) setFieldStyle(patch.style)
   }, [])
 
   /**
@@ -282,6 +285,18 @@ export function App({ initialIndex }: { initialIndex: DataIndex }) {
     [status],
   )
 
+
+  /** Prepare the frame the timeline is about to step to — drawn, if smooth — before it is needed. */
+  const framePreload = useMemo(() => {
+    if (!fieldOn || fieldLayer === 'wind') return undefined
+    const model = findModel(fieldManifest, modelForLayer(fieldModel, fieldLayer))
+    const legend = legendFor(fieldManifest, fieldLayer)
+    return (t: string) => {
+      const step = nearestStep(fieldRunDoc, t, fieldManifest?.stepHours ?? 3)
+      const url = step ? frameUrl(BASE_URL, step, fieldLayer) : null
+      if (url) void frameSource(url, fieldStyle, model, legend)
+    }
+  }, [fieldOn, fieldLayer, fieldManifest, fieldModel, fieldRunDoc, fieldStyle])
 
   /** Point-forecast reads are async; only the newest click may fill the popup. */
   const pointQuery = useRef(0)
@@ -852,18 +867,10 @@ const zoomTo = useCallback(
         initIndex={runIndex}
         initCount={runList.length}
         onInitStep={fieldOn && runList.length > 1 ? stepRun : undefined}
-        preload={
-          fieldOn && fieldLayer !== 'wind'
-            ? (t) => {
-                const step = nearestStep(fieldRunDoc, t, fieldManifest?.stepHours ?? 3)
-                const url = step ? frameUrl(BASE_URL, step, fieldLayer) : null
-                return url ? [url] : []
-              }
-            : undefined
-        }
+        preload={framePreload}
       />
 
-      <MapLegend field={field} step={shownStep} />
+      <MapLegend field={field} step={shownStep} view={view} onField={onField} />
 
       <div id="basemap" className="basemap-switch" role="tablist" aria-label="Basemap">
         {(Object.keys(BASEMAP_LABELS) as Basemap[]).map((key) => (

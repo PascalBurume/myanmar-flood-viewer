@@ -4,6 +4,7 @@ import maplibregl from 'maplibre-gl'
 import { toFeatureCollections, type CycloneDoc, type CycloneShow } from './cyclones'
 import {
   activeRun,
+  legendFor,
   WIND_CLASSES,
   arrowId,
   arrowImage,
@@ -33,6 +34,7 @@ import {
   type KindKey,
 } from './layers'
 import type { Theme } from './theme'
+import { frameSource } from './fieldRender'
 
 // Data paths are relative to wherever the site is mounted, which Vite bakes in at build time.
 const BASE_URL = import.meta.env.BASE_URL
@@ -256,7 +258,7 @@ export function useMapOverlays(
     const step = nearestStep(run, timeRef.current, field.manifest?.stepHours ?? 3)
     // The wind document loads after the layer is selected, and it must be part of the key: without
     // it the arrivals land on an unchanged key, this returns early and the arrows never appear.
-    const key = `${field.manifest?.generatedAt ?? ''}|${field.model}|${run?.key ?? ''}|${field.layer}|${step?.valid ?? ''}|${field.wind?.steps.length ?? 0}`
+    const key = `${field.manifest?.generatedAt ?? ''}|${field.model}|${run?.key ?? ''}|${field.layer}|${field.style}|${step?.valid ?? ''}|${field.wind?.steps.length ?? 0}`
     if (key === fieldKey.current) return
     fieldKey.current = key
 
@@ -285,19 +287,21 @@ export function useMapOverlays(
       map.setLayoutProperty(FIELD.layer, 'visibility', 'none')
       return
     }
-    // Decode first, swap after. `updateImage` fetches and uploads on its own schedule, so two
-    // quick steps could land in either order — the guard this replaced compared a counter with
-    // itself a line after incrementing it, and never fired. Decoding here makes the swap a cache
-    // hit, lets the previous frame stay on screen until the next is ready (no blank flash during
-    // playback), and gives the counter something real to guard.
-    const img = new Image()
-    img.src = url
-    const swap = () => {
+    // Prepare first, swap after: the smooth surface is drawn (or the frame decoded) before the
+    // source is re-pointed. `updateImage` fetches and uploads on its own schedule, so two quick
+    // steps could land in either order — the guard this replaced compared a counter with itself a
+    // line after incrementing it, and never fired. Preparing here makes the swap a cache hit, keeps
+    // the previous frame on screen until the next is ready (no blank flash during playback), and
+    // gives the counter something real to guard.
+    const style = field.style
+    void frameSource(url, style, model, legendFor(field.manifest, field.layer)).then((ready) => {
       if (seq !== fieldSeq.current || mapRef.current !== map || !map.getSource(FIELD.img)) return
-      src.updateImage({ url, coordinates })
+      src.updateImage({ url: ready, coordinates })
+      // Blocks are drawn as blocks; the smooth surface is already ten times finer and is sampled
+      // linearly so its edges do not stair-step when zoomed in.
+      map.setPaintProperty(FIELD.layer, 'raster-resampling', style === 'smooth' ? 'linear' : 'nearest')
       map.setLayoutProperty(FIELD.layer, 'visibility', stateRef.current.field.on ? 'visible' : 'none')
-    }
-    img.decode().then(swap, swap)
+    })
   })
 
   /** Re-point the cyclone sources at the collections for the current file and moment. */
@@ -377,9 +381,9 @@ export function useMapOverlays(
           source: FIELD.img,
           paint: {
             'raster-opacity': stateRef.current.field.opacity,
-            // The blocks are the sampling grid; smoothing them would imply detail the model does
-            // not have. No cross-fade either, or a scrub flashes between frames.
-            'raster-resampling': 'nearest',
+            // Set per style in syncField: nearest for the blocks, linear for the smooth surface.
+            // No cross-fade, or a scrub flashes between frames.
+            'raster-resampling': stateRef.current.field.style === 'smooth' ? 'linear' : 'nearest',
             'raster-fade-duration': 0,
           },
         },

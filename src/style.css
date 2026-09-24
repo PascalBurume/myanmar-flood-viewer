@@ -3077,3 +3077,92 @@ body {
     animation: none;
   }
 }
+
+/* ---- Forecast display controls: Smooth / Blocks and density ----
+   In the Weather card and, for density and show/hide, on the key itself — where the eye already is
+   when the forecast is too strong or too faint over the map. */
+.wx-display {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 8px 2px;
+}
+
+.wx-style .seg-btn {
+  padding: 4px 11px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.wx-density,
+.legend-density {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--ink-2);
+}
+
+.wx-density input,
+.legend-density input {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--accent);
+}
+
+.wx-density em,
+.legend-density em {
+  width: 32px;
+  font-style: normal;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
+}
+
+.wx-style-desc {
+  margin: 4px 8px 6px;
+}
+
+.map-legend-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.legend-eye {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin: -3px -4px 0 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.legend-eye:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.legend-density {
+  margin-top: 7px;
+  font-size: 10.5px;
+}
+
+.map-legend.is-folded {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 8px 7px 11px;
+  font-size: 11.5px;
+  color: var(--ink-2);
+}

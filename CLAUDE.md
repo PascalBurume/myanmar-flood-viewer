@@ -391,6 +391,27 @@ the key's reading are drawn from them. The point forecast (`src/fieldSample.ts`)
 PNGs — Mercator rows, the inverse of `mercator_rows()` — and reports **classes, never figures**.
 The flood layers are multiplied by `FLOOD_DIM` on the Weather view.
 
+**Smooth rendering replaced the blocks as the default (Sept 2026), at the owner's request.** The
+earlier rule was "nearest-neighbour, because smoothing draws detail the model does not have"; the
+blocks read as a mosaic of 55 km squares next to Weather Lab's rain. `src/fieldRender.ts` now
+interpolates the **classes** bilinearly between sample centres, in the frame's Mercator space, onto
+an image ten times finer, and cuts back into the same classes — so every colour on the map is still
+one the key shows. The cost is stated in the panel ("shapes finer than 55 km are drawn, not
+forecast") and **Blocks** is one click away. The point forecast still reads the sample, not the
+drawing. Three things follow from it:
+
+- **Classes are read from the PNG's palette index, not its colour.** `frameClasses()` decodes the
+  file itself (inflate via `DecompressionStream`, all five PNG filters). Matching canvas colours to
+  the key only worked while the key's colours were the ones baked into each file; the index is the
+  class by construction, so `LEGENDS` can change without misreading any run on disk — which is what
+  let the rain palette move to Weather Lab's greens. Both styles are drawn client-side in the
+  manifest's colours, so Blocks never shows a stale palette either.
+- **The grid's edge fades over two samples** (`EDGE_FADE`). The forecast is a rectangle, and at
+  under one sample the fade still read as a ruled line down the Bay of Bengal. Widening the
+  domain instead would cost Open-Meteo calls the daily budget does not have.
+- **Density and show/hide live on the key as well as in the panel.** Hidden from the key, it folds
+  to one line on the Weather view rather than vanishing, so the same place can bring it back.
+
 **Layout:** `--legend-w` is the key's column; the timeline is positioned by `left`/`right` with an
 auto margin and subtracts it, and below 1,100px the key moves up out of the timeline's band. The
 header wraps to two rows so the view switch has its own (the title had been cut to "Myanmar Fl…"),

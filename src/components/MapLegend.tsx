@@ -24,9 +24,31 @@ import { formatMMT } from '../time'
  * layer with nothing said about it reads as a layer that failed to load. The step's own stats say
  * which it is, and the heaviest class present is marked on the scale.
  */
-export function MapLegend({ field, step }: { field: FieldState; step: FieldStep | null }) {
+export function MapLegend({
+  field,
+  step,
+  view,
+  onField,
+}: {
+  field: FieldState
+  step: FieldStep | null
+  view: 'floods' | 'weather'
+  onField: (patch: Partial<FieldState>) => void
+}) {
   const manifest = field.manifest
-  if (!manifest || !field.on) return null
+  if (!manifest) return null
+  // Hidden from here, the key folds to one line on the Weather view rather than vanishing, so the
+  // same place that hid the forecast can bring it back.
+  if (!field.on) {
+    return view === 'weather' ? (
+      <div className="map-legend is-folded" aria-label="Forecast field key">
+        <span>Forecast hidden</span>
+        <button type="button" className="mini-btn" onClick={() => onField({ on: true })}>
+          Show
+        </button>
+      </div>
+    ) : null
+  }
   const run = activeRun(manifest, field)
   const model = findModel(manifest, modelForLayer(field.model, field.layer))
   const layer = FIELD_LAYERS.find((l) => l.key === field.layer)
@@ -58,9 +80,22 @@ export function MapLegend({ field, step }: { field: FieldState; step: FieldStep 
 
   return (
     <div className="map-legend" aria-label="Forecast field key" key={`${model.key}|${field.layer}`}>
-      <p className="map-legend-head">
-        {model.label} · <strong>forecast</strong>
-      </p>
+      <div className="map-legend-top">
+        <p className="map-legend-head">
+          {model.label} · <strong>forecast</strong>
+        </p>
+        <button
+          type="button"
+          className="legend-eye"
+          aria-label="Hide the forecast"
+          title="Hide the forecast"
+          onClick={() => onField({ on: false })}
+        >
+          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+            <path d="M12 5C6.5 5 2.7 9.4 1.6 11.4a1.3 1.3 0 0 0 0 1.2C2.7 14.6 6.5 19 12 19s9.3-4.4 10.4-6.4a1.3 1.3 0 0 0 0-1.2C21.3 9.4 17.5 5 12 5zm0 11a4 4 0 1 1 0-8 4 4 0 0 1 0 8z" fill="currentColor" />
+          </svg>
+        </button>
+      </div>
       <p className="map-legend-sub">
         {run.init ? `Run ${formatMMT(run.init, { short: true })}` : 'Run time not published'}
         {layer ? ` · ${layer.label}` : ''}
@@ -96,6 +131,22 @@ export function MapLegend({ field, step }: { field: FieldState; step: FieldStep 
           <p className="map-legend-note">Arrows point the way the wind blows; colour and size by speed.</p>
         </div>
       )}
+
+      {/* How strongly the forecast is drawn over the map — "density" in the reader's word for it,
+          opacity underneath. Here as well as in the panel because this is where the eye is. */}
+      <label className="legend-density">
+        <span>Density</span>
+        <input
+          type="range"
+          min={0.15}
+          max={1}
+          step={0.05}
+          value={field.opacity}
+          aria-label="Forecast density"
+          onChange={(e) => onField({ opacity: Number(e.target.value) })}
+        />
+        <em>{Math.round(field.opacity * 100)}%</em>
+      </label>
 
       {reading ? (
         <p className={`map-legend-reading${stats && stats.peak === 0 ? ' is-empty' : ''}`}>

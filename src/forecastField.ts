@@ -11,6 +11,7 @@
  */
 
 import { useEffect, useState } from 'react'
+import type { FieldStyle } from './fieldRender'
 
 export type FieldLayer = 'precip' | 'prob25' | 'prob50' | 'wind'
 export type FieldModelKey = 'ecmwf' | 'gfs' | 'icon' | 'weathernext'
@@ -91,6 +92,8 @@ export interface FieldState {
   run: string | null
   layer: FieldLayer
   opacity: number
+  /** Smooth surface or the raw blocks — a drawing choice only; the data is the same. */
+  style: FieldStyle
   wind: WindDoc | null
 }
 
@@ -107,7 +110,7 @@ export const FIELD_MODELS: Array<{ key: FieldModelKey; label: string; desc: stri
 ]
 
 export const FIELD_LAYERS: Array<{ key: FieldLayer; label: string; desc: string; model?: string }> = [
-  { key: 'precip', label: 'Precipitation', desc: 'Rain forecast for each three-hour step. Blocks are the 0.5° sampling of a 0.25° model — about 55 km — not the shape of the weather.' },
+  { key: 'precip', label: 'Precipitation', desc: 'Rain forecast for each three-hour step, sampled every 0.5° (about 55 km) from a 0.25° model.' },
   { key: 'prob25', label: 'Probability > 25 mm / 3 h', desc: 'Share of the 51 ECMWF ensemble members forecasting more than 25 mm in the step. A spread of opinion, not a calibrated chance.', model: 'ecmwf-ens' },
   { key: 'prob50', label: 'Probability > 50 mm / 3 h', desc: 'The same for 50 mm — the amount that turns a wet day into a flooding one.', model: 'ecmwf-ens' },
   { key: 'wind', label: 'Wind 10 m', desc: 'Arrows point the way the wind is blowing, sized by speed. Sampled every 1°.' },

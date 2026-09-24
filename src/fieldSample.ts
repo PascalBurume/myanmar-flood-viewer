@@ -4,7 +4,7 @@
  * Clicking the Weather map used to do nothing unless an arrow or a storm was under the pointer, so
  * "what is forecast here?" had no answer short of reading colours off the key. This answers it
  * from the same PNGs the map shows — not from a second source that could disagree with them — by
- * finding the pixel under the click and matching its colour to the legend.
+ * finding the pixel under the click and reading its class.
  *
  * What comes back is a legend **class**, a range such as 10–20 mm, never a single figure: the
  * frames hold classes, and inventing a number between the stops would be precision the file does
@@ -14,7 +14,8 @@
 import { formatMMT } from './time'
 import { frameUrl, type FieldLayer, type FieldModel, type FieldRun, type LegendStops } from './forecastField'
 
-const merc = (lat: number) => Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360))
+export const merc = (lat: number) => Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360))
+export const unmerc = (y: number) => (Math.atan(Math.exp(y)) * 360) / Math.PI - 90
 
 /**
  * The pixel under a point, or null outside the frame. Columns are linear in longitude; rows are
@@ -30,54 +31,93 @@ export function pixelAt(lon: number, lat: number, bbox: number[], size: number[]
   return [x, y]
 }
 
+/** A frame's legend classes, one byte per pixel, read from the PNG itself. */
+export interface FrameClasses {
+  width: number
+  height: number
+  /** Palette index per pixel — which *is* the class: the pipeline writes index 0 as transparent
+   *  "nothing" and 1..N as the legend stops, in order. */
+  idx: Uint8Array
+}
+
+/**
+ * Decode a paletted PNG to its palette indices.
+ *
+ * Reading colours back through a canvas and matching them to the key worked only while the key's
+ * colours were the ones baked into the file; a palette change would have misread every frame
+ * already on disk. The index is the class by construction, whatever colour it was painted, so this
+ * reads the index. Standard PNG unfiltering (all five filter types, one byte per pixel) and the
+ * browser's own zlib inflate; only the colour type the pipeline writes is accepted.
+ */
+async function decodeIndices(url: string): Promise<FrameClasses | null> {
+  const res = await fetch(url)
+  if (!res.ok) return null
+  const buf = new Uint8Array(await res.arrayBuffer())
+  const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength)
+  let pos = 8
+  let width = 0
+  let height = 0
+  const idat: Uint8Array<ArrayBuffer>[] = []
+  while (pos + 8 <= buf.length) {
+    const len = view.getUint32(pos)
+    const kind = String.fromCharCode(...buf.subarray(pos + 4, pos + 8))
+    const body = buf.subarray(pos + 8, pos + 8 + len)
+    if (kind === 'IHDR') {
+      width = view.getUint32(pos + 8)
+      height = view.getUint32(pos + 12)
+      if (body[8] !== 8 || body[9] !== 3) return null // 8-bit indexed only
+    } else if (kind === 'IDAT') idat.push(body.slice())
+    else if (kind === 'IEND') break
+    pos += 12 + len
+  }
+  if (!width || !height || !idat.length) return null
+  const raw = new Uint8Array(await new Response(new Blob(idat).stream().pipeThrough(new DecompressionStream('deflate'))).arrayBuffer())
+  const idx = new Uint8Array(width * height)
+  let prev = new Uint8Array(width)
+  for (let y = 0; y < height; y++) {
+    const f = raw[y * (width + 1)]
+    const line = raw.subarray(y * (width + 1) + 1, (y + 1) * (width + 1))
+    const cur = new Uint8Array(width)
+    for (let x = 0; x < width; x++) {
+      const a = x ? cur[x - 1] : 0
+      const b = prev[x]
+      const c = x ? prev[x - 1] : 0
+      let p = 0
+      if (f === 1) p = a
+      else if (f === 2) p = b
+      else if (f === 3) p = (a + b) >> 1
+      else if (f === 4) {
+        const pa = Math.abs(b - c)
+        const pb = Math.abs(a - c)
+        const pc = Math.abs(a + b - 2 * c)
+        p = pa <= pb && pa <= pc ? a : pb <= pc ? b : c
+      }
+      cur[x] = (line[x] + p) & 0xff
+    }
+    idx.set(cur, y * width)
+    prev = cur
+  }
+  return { width, height, idx }
+}
+
 /** Decoded frames, by URL. Frames are a few hundred bytes and immutable, so they are kept. */
-const frames = new Map<string, Promise<ImageData | null>>()
+const frames = new Map<string, Promise<FrameClasses | null>>()
 const MAX_FRAMES = 600
 
-function pixels(url: string): Promise<ImageData | null> {
+export function frameClasses(url: string): Promise<FrameClasses | null> {
   const hit = frames.get(url)
   if (hit) return hit
-  const p = (async () => {
-    try {
-      const img = new Image()
-      img.src = url
-      await img.decode()
-      const c = document.createElement('canvas')
-      c.width = img.naturalWidth
-      c.height = img.naturalHeight
-      const g = c.getContext('2d', { willReadFrequently: true })
-      if (!g) return null
-      g.drawImage(img, 0, 0)
-      return g.getImageData(0, 0, c.width, c.height)
-    } catch {
-      return null
-    }
-  })()
+  const p = decodeIndices(url).catch(() => null)
   if (frames.size >= MAX_FRAMES) frames.delete(frames.keys().next().value as string)
   frames.set(url, p)
   return p
 }
 
-const rgb = (hex: string) => [1, 3, 5].map((i) => Number.parseInt(hex.slice(i, i + 2), 16))
+export const rgb = (hex: string) => [1, 3, 5].map((i) => Number.parseInt(hex.slice(i, i + 2), 16))
 
-/**
- * The legend class of one pixel: 0 for transparent (nothing forecast over the first stop), else
- * the 1-based stop whose colour is nearest. Nearest rather than exact, so a browser that colour-
- * manages the PNG by a unit or two still lands on the right stop.
- */
-function classOf(data: ImageData, x: number, y: number, palette: number[][]): number {
-  const i = (y * data.width + x) * 4
-  if (data.data[i + 3] < 128) return 0
-  let best = 0
-  let bestD = Infinity
-  palette.forEach(([r, g, b], k) => {
-    const d = (data.data[i] - r) ** 2 + (data.data[i + 1] - g) ** 2 + (data.data[i + 2] - b) ** 2
-    if (d < bestD) {
-      bestD = d
-      best = k + 1
-    }
-  })
-  return best
+/** The class at one pixel, clamped to the legend in case a file ever carries more stops. */
+export function classAt(f: FrameClasses, x: number, y: number, stops: number): number {
+  return Math.min(f.idx[y * f.width + x] ?? 0, stops)
 }
 
 export interface PointSeries {
@@ -100,12 +140,11 @@ export async function seriesAt(
 ): Promise<PointSeries | null> {
   const px = pixelAt(lon, lat, model.bbox, model.size)
   if (!px) return null
-  const palette = legend.stops.map(([, c]) => rgb(c))
   const steps = await Promise.all(
     run.steps.map(async (s) => {
       const url = frameUrl(base, s, layer)
-      const data = url ? await pixels(url) : null
-      return { t: s.valid, cls: data ? classOf(data, px[0], px[1], palette) : 0 }
+      const data = url ? await frameClasses(url) : null
+      return { t: s.valid, cls: data ? classAt(data, px[0], px[1], legend.stops.length) : 0 }
     }),
   )
   return { steps, current: steps.find((s) => s.t === shown) ?? null }
@@ -166,6 +205,6 @@ export function seriesPopupHtml(opts: {
   <div class="pt-bars" role="img" aria-label="${esc(`${layer === 'precip' ? 'Rain' : 'Probability'} class at every step of the run`)}">${bars}</div>
   <div class="pt-axis"><span>${first ? esc(formatMMT(first, { short: true })) : ''}</span><span>${last ? esc(formatMMT(last, { short: true })) : ''}</span></div>
   ${wettest}
-  <p class="pt-note">A forecast, not an observation. Ranges are the key's classes — the frames hold no finer figure.</p>
+  <p class="pt-note">A forecast, not an observation. It reads the model's sample, not the smoothed drawing, and ranges are the key's classes — the frames hold no finer figure.</p>
 </div>`
 }

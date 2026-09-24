@@ -105,16 +105,46 @@ export function WeatherControls({
           )
         })}
 
-        <input
-          className="opacity"
-          type="range"
-          min={0.1}
-          max={1}
-          step={0.05}
-          value={field.opacity}
-          aria-label="Forecast field opacity"
-          onChange={(e) => onField({ opacity: Number(e.target.value) })}
-        />
+        <p className="controls-head">Display</p>
+        <div className="wx-display">
+          <div className="seg wx-style" role="radiogroup" aria-label="How the forecast is drawn">
+            {(
+              [
+                ['smooth', 'Smooth'],
+                ['grid', 'Blocks'],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                role="radio"
+                aria-checked={field.style === key}
+                className={`seg-btn${field.style === key ? ' is-on' : ''}`}
+                onClick={() => onField({ style: key })}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <label className="wx-density">
+            <span>Density</span>
+            <input
+              type="range"
+              min={0.15}
+              max={1}
+              step={0.05}
+              value={field.opacity}
+              aria-label="Forecast density"
+              onChange={(e) => onField({ opacity: Number(e.target.value) })}
+            />
+            <em>{Math.round(field.opacity * 100)}%</em>
+          </label>
+        </div>
+        <p className="layer-desc wx-style-desc">
+          {field.style === 'smooth'
+            ? 'Drawn as a continuous surface between samples 55 km apart. Shapes finer than that are drawn, not forecast.'
+            : 'Each block is one sample of the model, about 55 km across: exactly what the forecast holds.'}
+        </p>
       </div>
 
       {field.on && rain.on && field.layer === 'precip' ? (
@@ -129,8 +159,8 @@ export function WeatherControls({
 
       <p className="wx-caveat">
         <strong>Forecasts, not observations</strong> — the only such layers in this viewer besides the
-        rain and river charts below. A 0.25° global model sampled every 0.5° (about 55 km): the
-        blocks are the sampling, not the shape of the weather. Rainfall is the total over each
+        rain and river charts below. A 0.25° global model sampled every 0.5° (about 55 km); the
+        smooth drawing fills in between samples, and Blocks shows the samples. Rainfall is the total over each
         three-hour step; probabilities are the share of 51 ensemble members over a threshold, not a
         calibrated chance. No local calibration. For warnings, see the Myanmar Department of
         Meteorology and Hydrology.
