@@ -95,10 +95,42 @@ class AggregationTests(unittest.TestCase):
         steps = sf.step_indices(times)
         self.assertEqual(steps[0], (3, 3, '2026-09-05T03:00:00Z'))
         self.assertEqual(steps[-1][2], '2026-09-06T21:00:00Z')
-        kept = [s for s in steps if s[2] >= sf.valid_from('2026-09-05T06:00:00Z', '2026-09-05T13:00:00+00:00')]
-        self.assertEqual(kept[0][2], '2026-09-05T06:00:00Z')
         # No published init: cut at the fetch time floored to the 3-hour step.
         self.assertEqual(sf.valid_from(None, '2026-09-05T13:40:00+00:00'), '2026-09-05T12:00:00Z')
+
+    def test_usable_steps_start_after_the_init(self):
+        times = [f'2026-09-05T{h:02d}:00' for h in range(24)] + [f'2026-09-06T{h:02d}:00' for h in range(24)]
+        kept = sf.usable_steps(times, '2026-09-05T06:00:00Z')
+        # The step stamped 06Z totals 03–06Z: the previous run's rain. The run's own first step
+        # ends three hours after its init, and its lead is counted from the init.
+        self.assertEqual(kept[0], (9, 3, '2026-09-05T09:00:00Z'))
+        self.assertEqual(kept[1][1:], (6, '2026-09-05T12:00:00Z'))
+        # An 18Z run read the next morning: the first step on offer is 03Z, a nine-hour lead —
+        # not the three it used to be labelled with.
+        late = sf.usable_steps(times, '2026-09-04T18:00:00Z')
+        self.assertEqual(late[0], (3, 9, '2026-09-05T03:00:00Z'))
+
+    def test_normalise_steps_repairs_runs_on_disk(self):
+        run = {'init': '2026-09-24T06:00:00Z', 'fetchedAt': '2026-09-24T16:40:58+00:00', 'steps': [
+            {'h': 3, 'valid': '2026-09-24T06:00:00Z', 'precip': 'a'},
+            {'h': 6, 'valid': '2026-09-24T09:00:00Z', 'precip': 'b'},
+            {'h': 9, 'valid': '2026-09-24T12:00:00Z', 'precip': 'c'},
+        ]}
+        out = sf.normalise_steps(run)
+        self.assertEqual([(s['h'], s['precip']) for s in out], [(3, 'b'), (6, 'c')])
+        self.assertEqual(sf.normalise_steps({**run, 'steps': out}), out)  # idempotent
+        # No init: the fetch time floored to the step stands in for it.
+        gfs = {'init': None, 'fetchedAt': '2026-09-24T16:40:58+00:00', 'steps': [
+            {'h': 3, 'valid': '2026-09-24T15:00:00Z'}, {'h': 6, 'valid': '2026-09-24T18:00:00Z'}]}
+        self.assertEqual([s['h'] for s in sf.normalise_steps(gfs)], [3])
+
+    def test_frame_stats_peak_and_wet_share(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / 'f.png'
+            png.write_png(p, 4, 2, [bytes([0, 0, 1, 3]), bytes([0, 0, 0, 2])], [(0, 0, 0)] * 4)
+            self.assertEqual(sf.frame_stats(p), [3, 0.375])
+            png.write_png(p, 2, 1, [bytes([0, 0])], [(0, 0, 0)] * 2)
+            self.assertEqual(sf.frame_stats(p), [0, 0])
 
     def test_raster_rows_match_mercator_mapping(self):
         lats, lons, rows, cols = sf.grid_points()

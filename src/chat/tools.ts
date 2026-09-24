@@ -1009,6 +1009,14 @@ const HANDLERS = {
       cellDeg: number
       points: Array<{ name: string; lat: number; lon: number; cell?: number[]; steps: Array<Record<string, number | string | null>> }>
     }
+    // `points.json` is written once per run and never rewritten, so a run from before the step
+    // timing was fixed still carries the previous run's step first and leads counted from the wrong
+    // moment. The manifest's steps are normalised on every build; the point values are taken only
+    // for those steps, with their leads, so the assistant and the map agree on what the run covers.
+    const leads = new Map(run.steps.map((s) => [s.valid, s.h]))
+    for (const p of doc.points) {
+      p.steps = p.steps.filter((st) => leads.has(String(st.valid))).map((st) => ({ ...st, h: leads.get(String(st.valid)) ?? null }))
+    }
     const wanted = typeof input.place === 'string' && input.place.trim() ? input.place.trim().toLowerCase() : null
     const places = doc.points.filter((p) => !wanted || p.name.toLowerCase().includes(wanted))
     if (!places.length) throw new Error(`no forecast point matches "${String(input.place)}"`)

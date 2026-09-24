@@ -30,8 +30,13 @@ Traps recorded here
   cell) and the sample row for each is found by inverse projection. `mercator_rows()` is the whole
   of it and the unit test pins the middle row.
 - **Open-Meteo's hourly series starts at 00:00 UTC today**, whatever the run's init, so the hours
-  before the init are the previous run's forecast. Steps before the init are dropped; for models
-  that publish no init (GFS, ICON here), steps before the fetch time are dropped instead.
+  before the init are the previous run's forecast. A step totals the three hours *ending* at it, so
+  the first step a run can claim is the one ending three hours after its init: the step stamped
+  with the init itself is rain from 03–06Z when the init is 06Z, which is the previous run's. That
+  step used to be kept, and the lead hours were counted from whichever step came first rather than
+  from the init, so an 18Z run fetched the next morning labelled a nine-hour lead as three.
+  `usable_steps()` is the one place both are decided. For models that publish no init (GFS, ICON
+  here) the fetch time floored to the step stands in for it.
 - **Only ECMWF publishes its initialisation time** (`/data/ecmwf_ifs025/static/meta.json`). The
   others are keyed by fetch time and the UI says "run time not published" rather than guessing.
 - **Precipitation is the total of the preceding hour**, so the 3-h total ending at a step is the sum
@@ -68,7 +73,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from common import INDEX_PATH, fetch, utcnow
-from png import classify, hex_rgb, write_png
+from png import classify, decode_png, hex_rgb, write_png
 from scan_weather import RAIN_POINTS, RIVER_POINTS
 
 FIELD_DIR = INDEX_PATH.parent / 'field'
@@ -282,10 +287,34 @@ def model_init(model_id: str) -> str | None:
 # ---- aggregation ----
 
 def step_indices(times: list[str]) -> list[tuple[int, int, str]]:
-    """(index, lead hours, valid ISO) for every 3-hourly step with a full three hours behind it."""
+    """(index, hours since the series starts, valid ISO) for every 3-hourly step with a full three
+    hours behind it. The middle value is *not* a lead time — see `usable_steps()`."""
     out = []
     for k in range(STEP_H, len(times), STEP_H):
         out.append((k, k, times[k] + ':00Z' if len(times[k]) == 16 else times[k]))
+    return out
+
+
+def _utc(t: str) -> datetime:
+    return datetime.strptime(t[:16], '%Y-%m-%dT%H:%M').replace(tzinfo=timezone.utc)
+
+
+def lead_hours(ref: str, valid: str) -> float:
+    return (_utc(valid) - _utc(ref)).total_seconds() / 3600
+
+
+def usable_steps(times: list[str], ref: str) -> list[tuple[int, int, str]]:
+    """(index, lead hours from `ref`, valid ISO) for the steps a run started at `ref` can claim.
+
+    A step is the total of the three hours ending at it, so it belongs to the run only when that
+    whole window is after the start: lead ≥ STEP_H. The step stamped with the init itself is the
+    previous run's rain.
+    """
+    out = []
+    for k, _i, valid in step_indices(times):
+        lead = lead_hours(ref, valid)
+        if lead >= STEP_H:
+            out.append((k, int(round(lead)), valid))
     return out
 
 
@@ -357,7 +386,7 @@ def write_model_runs(wanted: list[tuple[str, str, str, bool]], fetched: str, pac
 
     for key, label, model_id, published, init, run_key in todo:
         start = valid_from(init, fetched)
-        steps = [(k, h, v) for k, h, v in step_indices(times) if v >= start]
+        steps = usable_steps(times, start)
         if not steps:
             written.append(f'{key} skipped: no steps after {start}')
             continue
@@ -368,9 +397,7 @@ def write_model_runs(wanted: list[tuple[str, str, str, bool]], fetched: str, pac
         tmp.mkdir(parents=True)
 
         step_docs, wind_steps = [], []
-        lead0 = steps[0][0]
-        for k, _h, valid in steps:
-            lead = k - lead0 + STEP_H
+        for k, lead, valid in steps:
             grid_vals = [[sum3h(col(locs[r * cols + c]['hourly'], 'precipitation', model_id), k) for c in range(cols)]
                          for r in range(rows)]
             name = f'precip3h_{lead:03d}.png'
@@ -435,7 +462,7 @@ def write_ensemble_run(fetched: str, pacer: Pacer) -> tuple[str, str] | None:
     times = locs[0]['hourly']['time']
     members = [k for k in locs[0]['hourly'] if k.startswith('precipitation')]
     start = valid_from(init, fetched)
-    steps = [(k, h, v) for k, h, v in step_indices(times) if v >= start]
+    steps = usable_steps(times, start)
     if not steps:
         raise RuntimeError(f'{key}: no steps after {start}')
 
@@ -456,9 +483,7 @@ def write_ensemble_run(fetched: str, pacer: Pacer) -> tuple[str, str] | None:
 
     step_docs = []
     per_point: dict[int, list[dict]] = {}
-    lead_h0 = steps[0][0]
-    for k, _h, valid in steps:
-        lead = k - lead_h0 + STEP_H
+    for k, lead, valid in steps:
         doc = {'h': lead, 'valid': valid}
         for th in PROB_THRESHOLDS:
             grid_vals = [[share(locs[r * cols + c]['hourly'], k, th)[1] for c in range(cols)] for r in range(rows)]
@@ -530,6 +555,87 @@ def prune(key: str, keep: int) -> int:
     return dropped
 
 
+FRAME_LAYERS = ('precip', 'prob25', 'prob50')
+
+
+def normalise_steps(run: dict) -> list[dict]:
+    """The steps a run can honestly claim, with lead hours counted from its start.
+
+    Applied to every run on disk, not only new ones: runs written before `usable_steps()` carry the
+    previous run's step first and leads counted from the wrong moment, and they stay on disk for
+    days. Idempotent for runs written since.
+    """
+    ref = run.get('init') or valid_from(None, run['fetchedAt'])
+    out = []
+    for s in run['steps']:
+        lead = lead_hours(ref, s['valid'])
+        if lead >= STEP_H:
+            out.append({**s, 'h': int(round(lead))})
+    return out
+
+
+def frame_stats(path: Path) -> list:
+    """[peak class, wet share] for one frame, read back from its own pixels.
+
+    Peak is the highest legend class anywhere on the frame (0 = nothing drawn) and wet is the share
+    of the image with any class at all. Read from the PNG rather than kept from the fetch so runs
+    already on disk get the same numbers by the same path. The share is of image area, and the
+    image is Mercator-spaced, so it leans very slightly north — fine for "how much of the map is
+    raining", which is all it is used for.
+    """
+    _w, _h, rows, _pal, _t = decode_png(path.read_bytes())
+    total = sum(len(r) for r in rows)
+    peak = max((max(r) for r in rows if r), default=0)
+    wet = sum(1 for r in rows for b in r if b)
+    return [peak, round(wet / total, 3) if total else 0]
+
+
+def run_stats(key: str, run: dict) -> dict:
+    """Stats for every frame of a run, cached beside it in `stats.json`.
+
+    A sidecar rather than a rewrite of run.json: run directories are written once and served
+    `immutable`, and a new file added beside the others does not break that.
+    """
+    run_dir = FIELD_DIR / key / run['key']
+    cache_path = run_dir / 'stats.json'
+    try:
+        cache = json.loads(cache_path.read_text(encoding='utf-8'))
+    except Exception:  # noqa: BLE001 - absent or unreadable: rebuild it
+        cache = {}
+    changed = False
+    for s in run['steps']:
+        for layer in FRAME_LAYERS:
+            rel = s.get(layer)
+            if not rel:
+                continue
+            name = rel.rsplit('/', 1)[-1]
+            if name not in cache:
+                f = run_dir / name
+                if not f.exists():
+                    continue
+                cache[name] = frame_stats(f)
+                changed = True
+    if changed:
+        cache_path.write_text(json.dumps(cache, separators=(',', ':')) + '\n', encoding='utf-8')
+    return cache
+
+
+def manifest_run(key: str, run: dict, fields: tuple[str, ...]) -> dict:
+    doc = {k: run[k] for k in fields if k in run}
+    stats = run_stats(key, run)
+    steps = []
+    for s in normalise_steps(run):
+        st = {}
+        for layer in FRAME_LAYERS:
+            rel = s.get(layer)
+            if rel and rel.rsplit('/', 1)[-1] in stats:
+                peak, wet = stats[rel.rsplit('/', 1)[-1]]
+                st[layer] = {'peak': peak, 'wet': wet}
+        steps.append({**s, 'stats': st} if st else s)
+    doc['steps'] = steps
+    return doc
+
+
 def build_manifest() -> dict:
     """Rebuilt from disk, so a deleted run can never linger in it."""
     lats, lons, rows, cols = grid_points()
@@ -540,7 +646,7 @@ def build_manifest() -> dict:
         models.append({
             'key': key, 'label': label, 'source': model_id, 'initPublished': published,
             'layers': ['precip', 'wind'], 'bbox': bbox(), 'size': [cols, rows * MERC_ROWS_PER_CELL],
-            'runs': [{k: r[k] for k in ('key', 'init', 'fetchedAt', 'steps', 'wind', 'points')} for r in runs],
+            'runs': [manifest_run(key, r, ('key', 'init', 'fetchedAt', 'wind', 'points')) for r in runs],
         })
     key, label, model_id = ENS
     runs = runs_on_disk(key)
@@ -548,7 +654,7 @@ def build_manifest() -> dict:
         'key': key, 'label': label, 'source': f'{model_id} ensemble', 'initPublished': True,
         'layers': ['prob25', 'prob50'], 'bbox': bbox(ENS_GRID), 'size': [ecols, erows * MERC_ROWS_PER_CELL],
         'members': runs[0]['members'] if runs else 51,
-        'runs': [{k: r[k] for k in ('key', 'init', 'fetchedAt', 'steps', 'points')} for r in runs],
+        'runs': [manifest_run(key, r, ('key', 'init', 'fetchedAt', 'points')) for r in runs],
     })
     return {
         'generatedAt': utcnow(),
