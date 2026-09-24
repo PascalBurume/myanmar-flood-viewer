@@ -17,6 +17,8 @@
      had no room to breathe. Widened, but still a minority of the screen — the map stays the
      loudest thing, which is the whole point of the layout. */
   --panel-w: 384px;
+  /* The forecast key's column on the map. The timeline subtracts it so the two never share a band. */
+  --legend-w: 216px;
   --radius: 16px;
   --radius-sm: 10px;
 
@@ -184,6 +186,9 @@ body {
   gap: 16px;
   /* Keep scrolling inside the panel from chaining into map zoom or page scroll */
   overscroll-behavior: contain;
+  /* Replays whenever the pane comes back from [hidden] — which is every tab or view switch — so
+     the change reads as the panel turning a page rather than its contents blinking. */
+  animation: pane-in 0.24s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
 .panel-foot {
@@ -196,6 +201,22 @@ body {
 
 .panel-foot a {
   color: var(--ink-2);
+}
+
+.panel-foot.is-inline {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .panel-foot.is-pinned {
+    display: none;
+  }
+
+  .panel-foot.is-inline {
+    display: block;
+    flex: none;
+    margin: 4px -12px -12px;
+  }
 }
 
 .disclaimer {
@@ -698,14 +719,24 @@ body {
     border-bottom-right-radius: 0;
   }
 
-  /* Lift the map controls by the height of the collapsed panel header */
+  /* Lift the map controls by the height of the collapsed panel header — two rows now, since the
+     view switch has one of its own. */
   .maplibregl-ctrl-bottom-right,
   .maplibregl-ctrl-bottom-left {
-    bottom: 56px;
+    bottom: 108px;
   }
 
+  /* Clear of the attribution box, which expands to two lines on a phone. */
   .basemap-switch {
-    bottom: 90px;
+    bottom: 162px;
+  }
+
+  /* With the sheet open it covers the bottom 62% of the screen, and the switcher was drawn on top
+     of it, over the sheet's own footer. It comes back when the sheet is collapsed — which is when
+     there is a map to change the base of. */
+  .panel:not(.collapsed) ~ .basemap-switch,
+  .panel:not(.collapsed) ~ .imagery-date {
+    display: none;
   }
 
   /* Enlarge the hit area for touch */
@@ -1187,7 +1218,8 @@ body {
 }
 
 @media (max-width: 640px) {
-  .imagery-date { bottom: 128px; }
+  /* Above the basemap switcher, which sits above the two-row collapsed header. */
+  .imagery-date { bottom: 200px; }
 }
 
 .imagery-date .clear-day {
@@ -1832,6 +1864,7 @@ body {
   font-size: 11.5px;
   font-weight: 600;
   cursor: pointer;
+  transition: color 0.18s ease, border-color 0.18s ease, background-color 0.18s ease;
 }
 
 .panel-tabs button:hover { color: var(--ink-2); background: var(--hover); }
@@ -2301,40 +2334,51 @@ body {
 }
 
 /* ---- The timeline (src/components/Timeline.tsx) ----
-   Bottom-centre of the map, in the same shell as the imagery-date pill. Only present when there
-   is more than one moment to move between. */
+   Bottom of the map area, between the panel and the key. Only present when there is more than one
+   moment to move between.
+
+   Positioned by `left` and `right` with an auto margin rather than by a centre and a width: it
+   used to be centred on the map and sized by a formula, and on a window of about 1,000px the
+   formula's minimum pushed it under the forecast key in the same band. Now the key's column is
+   subtracted outright, and below 1,100px the key moves up out of the band entirely. */
 .timeline {
+  --thumb: 16px;
   position: absolute;
-  /* Centred on the map area, not the viewport: the panel takes the left edge. */
-  left: calc(var(--panel-w) + (100vw - var(--panel-w)) / 2);
-  /* Above the basemap switch and the imagery-date pill, so it never collides with either on a
-     narrow window; both keep the bottom edge. */
+  left: calc(var(--panel-w) + 20px);
+  right: calc(var(--legend-w) + 30px);
   bottom: 92px;
-  transform: translateX(-50%);
+  max-width: 620px;
+  margin-inline: auto;
   z-index: 2;
   display: flex;
   align-items: center;
-  gap: 10px;
-  width: min(440px, calc(100vw - var(--panel-w) - 520px));
-  min-width: 240px;
-  padding: 8px 12px 8px 8px;
+  gap: 12px;
+  padding: 10px 14px 8px 10px;
   border: 1px solid var(--line-2);
-  border-radius: 14px;
+  border-radius: 16px;
   background: var(--surface-solid);
   box-shadow: var(--shadow);
+  animation: rise-in 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
 .timeline-play {
-  width: 34px;
-  height: 34px;
+  width: 38px;
+  height: 38px;
   flex: none;
   border-radius: 999px;
-  font-size: 13px;
+  color: var(--ink);
+  transition: background 0.15s ease, color 0.15s ease, transform 0.12s ease, box-shadow 0.2s ease;
+}
+
+.timeline-play:active {
+  transform: scale(0.92);
 }
 
 .timeline-play[aria-pressed='true'] {
   background: var(--accent);
+  border-color: var(--accent);
   color: var(--accent-ink);
+  box-shadow: 0 0 0 4px var(--info-tint);
 }
 
 .timeline-body {
@@ -2342,7 +2386,7 @@ body {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
 }
 
 .timeline-head,
@@ -2357,12 +2401,24 @@ body {
 }
 
 .timeline-label {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
   font-size: 12.5px;
   font-weight: 600;
   color: var(--ink);
+  white-space: nowrap;
+}
+
+.timeline-lead {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-3);
 }
 
 .timeline-badge {
+  flex: none;
   padding: 1px 7px;
   border-radius: 999px;
   border: 1px solid var(--line-2);
@@ -2371,6 +2427,7 @@ body {
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--ink-2);
+  transition: color 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
 }
 
 .timeline-badge.is-forecast {
@@ -2379,14 +2436,151 @@ body {
   background: repeating-linear-gradient(45deg, transparent, transparent 3px, var(--warning-tint) 3px, var(--warning-tint) 5px);
 }
 
+/* The track: strip, "now" tick and slider share one box, so a bar and the thumb position for the
+   same frame line up. Every position below is the same formula — half a thumb in from each end,
+   then linear in the frame index — because that is where a native range puts its thumb. */
+.timeline-track {
+  position: relative;
+  padding-top: 4px;
+}
+
+.timeline-track.has-strip {
+  padding-top: 26px;
+}
+
+.timeline-strip {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 4px;
+  height: 20px;
+  pointer-events: none;
+}
+
+.timeline-strip-bar {
+  position: absolute;
+  bottom: 0;
+  left: calc(var(--thumb) / 2 + (100% - var(--thumb)) * var(--i) / var(--n));
+  width: max(2px, calc((100% - var(--thumb)) / var(--n) - 1px));
+  height: calc(var(--h) * 100%);
+  transform: translateX(-50%);
+  border-radius: 2px 2px 0 0;
+  background: var(--c);
+  opacity: 0.8;
+  pointer-events: auto;
+  cursor: pointer;
+  transform-origin: bottom;
+  animation: bar-grow 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation-delay: calc(var(--i) * 6ms);
+  transition: opacity 0.15s ease;
+}
+
+.timeline-strip-bar:hover,
+.timeline-strip-bar.is-current {
+  opacity: 1;
+}
+
+.timeline-strip-bar.is-current {
+  box-shadow: 0 0 0 1.5px var(--surface-solid), 0 0 0 2.5px var(--ink-2);
+}
+
+.timeline-now {
+  position: absolute;
+  top: 0;
+  bottom: 2px;
+  left: calc(var(--thumb) / 2 + (100% - var(--thumb)) * var(--now));
+  width: 0;
+  border-left: 1.5px dashed var(--critical);
+  pointer-events: none;
+}
+
+.timeline-now em {
+  position: absolute;
+  top: -3px;
+  left: 3px;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--critical);
+  background: var(--surface-solid);
+  padding: 0 2px;
+  border-radius: 3px;
+}
+
+/* A drawn slider: the native one cannot show progress, and its track is a different thickness in
+   every engine, which would undo the alignment above. */
 .timeline input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  position: relative;
+  display: block;
   width: 100%;
+  height: 18px;
   margin: 0;
-  accent-color: var(--accent);
+  background: transparent;
+  cursor: pointer;
+}
+
+.timeline input[type='range']::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--accent) 0 calc(var(--pos) * 100%), var(--track) 0);
+}
+
+.timeline input[type='range']::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--accent) 0 calc(var(--pos) * 100%), var(--track) 0);
+}
+
+.timeline input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: var(--thumb);
+  height: var(--thumb);
+  margin-top: calc((4px - var(--thumb)) / 2);
+  border: 2px solid var(--surface-solid);
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  transition: transform 0.12s ease;
+}
+
+.timeline input[type='range']::-moz-range-thumb {
+  width: calc(var(--thumb) - 4px);
+  height: calc(var(--thumb) - 4px);
+  border: 2px solid var(--surface-solid);
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+
+.timeline input[type='range']:hover::-webkit-slider-thumb,
+.timeline input[type='range']:active::-webkit-slider-thumb {
+  transform: scale(1.15);
+}
+
+.timeline input[type='range']:focus-visible {
+  outline: none;
+}
+
+.timeline input[type='range']:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px var(--surface-solid), 0 0 0 5px var(--accent);
+}
+
+.timeline input[type='range']:focus-visible::-moz-range-thumb {
+  box-shadow: 0 0 0 3px var(--surface-solid), 0 0 0 5px var(--accent);
 }
 
 .timeline-init {
   color: var(--ink-3);
+}
+
+@media (max-width: 1100px) {
+  .timeline {
+    right: 20px;
+  }
 }
 
 @media (max-width: 640px) {
@@ -2395,40 +2589,80 @@ body {
     bottom: auto;
     left: 10px;
     right: 10px;
-    width: auto;
-    transform: none;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .timeline input[type='range'] {
-    transition: none;
+    max-width: none;
+    padding: 8px 10px 6px 8px;
+    animation-name: drop-in;
   }
 }
 
 /* ---- The view switch, in the panel header ----
    Two readings of one map. It sits between the title and the header buttons and stays reachable
    when the panel is collapsed, because collapsing hides the body, not the head. */
+/* Its own full-width row under the title. Squeezed between the title and three buttons it cut
+   "Myanmar Floods" down to "Myanmar Fl…", and the one control that changes the whole map was the
+   smallest thing in the header. Wrapping the header is CSS alone, so the collapsed panel still
+   shows it. The highlight is one pill that slides between the two, not two separately painted
+   buttons, so the change of reading is visible as a movement. */
+.panel-head {
+  flex-wrap: wrap;
+  row-gap: 10px;
+}
+
 .view-switch {
-  margin-left: auto;
-  flex: none;
+  order: 3;
+  flex: 1 0 100%;
+  position: relative;
+  display: flex;
+  padding: 3px;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  background: var(--hover);
+  isolation: isolate;
+}
+
+.view-switch::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc(50% - 3px);
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.25);
+  transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.view-switch:has(.seg-btn:nth-child(2).is-on)::before {
+  transform: translateX(100%);
 }
 
 .view-switch .seg-btn {
-  padding: 4px 10px;
-  font-size: 11px;
+  flex: 1;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  font-size: 12px;
   font-weight: 600;
+  color: var(--ink-2);
+  transition: color 0.2s ease;
 }
 
-/* The header has three things competing for 384px now, so the title yields first. */
-.brand {
-  min-width: 0;
+.view-switch .seg-btn:hover {
+  background: transparent;
+  color: var(--ink);
 }
 
-.brand h1 {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.view-switch .seg-btn.is-on {
+  background: transparent;
+  color: var(--accent-ink);
+}
+
+.view-switch .seg-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* ---- The Weather card (src/components/WeatherControls.tsx) ---- */
@@ -2479,6 +2713,11 @@ body {
   border: 1.5px solid var(--line-2);
   border-radius: 999px;
   background: var(--surface-solid);
+  transition: border-width 0.18s cubic-bezier(0.2, 0.8, 0.2, 1), border-color 0.18s ease;
+}
+
+.radio:hover .dot {
+  border-color: var(--ink-3);
 }
 
 .radio input:checked + .dot {
@@ -2520,7 +2759,8 @@ body {
   right: 10px;
   bottom: 96px;
   z-index: 2;
-  width: 216px;
+  width: var(--legend-w);
+  animation: rise-in 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) both;
   padding: 8px 10px 9px;
   border: 1px solid var(--line-2);
   border-radius: 12px;
@@ -2570,16 +2810,61 @@ body {
   color: var(--ink-2);
 }
 
+/* Drawn from the same class table as the arrows on the map, pointing east — the way a reader
+   expects a key to point. */
+.wind-key-row {
+  min-height: 16px;
+}
+
 .wind-key-arrow {
-  display: inline-block;
-  width: 20px;
-  color: #1b3a5c;
-  transform: rotate(-90deg);
-  text-align: center;
+  flex: none;
+  transform: rotate(90deg);
+  margin: 0 5px;
+  fill: var(--wind-light);
+  stroke: rgba(255, 255, 255, 0.95);
+  stroke-width: 3;
+  paint-order: stroke;
+  stroke-linejoin: round;
 }
 
 :root[data-theme='dark'] .wind-key-arrow {
-  color: #9ec5e8;
+  fill: var(--wind-dark);
+  stroke: rgba(10, 12, 16, 0.85);
+}
+
+/* What this step shows, in words — mainly so an empty probability map says it is empty rather
+   than looking like a layer that failed to load. */
+.map-legend-reading {
+  margin: 7px 0 0;
+  padding: 5px 7px;
+  border-radius: 7px;
+  background: var(--hover);
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.map-legend-reading.is-empty {
+  color: var(--ink-3);
+  font-style: italic;
+}
+
+/* The heaviest class on the frame, marked on the scale. */
+.rain-stop span {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.rain-stop.is-peak span {
+  transform: scaleY(1.6);
+  transform-origin: bottom;
+  box-shadow: 0 0 0 1.5px var(--ink);
+  border-radius: 1px;
+}
+
+.rain-stop.is-peak em {
+  color: var(--ink);
+  font-weight: 700;
 }
 
 /* ---- The timeline's model-run stepper ---- */
@@ -2622,13 +2907,173 @@ body {
   }
 
   .map-legend {
-    top: 92px;
+    top: 118px;
     bottom: auto;
     right: 10px;
-    width: 168px;
+    /* Eight stops need about 20px each, or "0.5" and "2" run together as "0.52". */
+    width: 204px;
+    animation-name: drop-in;
   }
 
   .timeline-init-label {
     font-size: 10px;
+  }
+}
+
+/* ---- Small print under a control card ----
+   Used by the Weather and cyclone cards for run times, attribution and "nothing here yet". It had
+   no rule at all, so it rendered at the browser's 16px — the largest text in the panel was its
+   footnotes. */
+.field-note {
+  margin: 0;
+  padding: 0 4px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.field-note strong {
+  color: var(--ink-2);
+}
+
+/* ---- Where the key goes when the timeline needs the whole bottom band ---- */
+@media (min-width: 641px) and (max-width: 1100px) {
+  .map-legend {
+    bottom: 198px;
+  }
+}
+
+/* ---- Motion ----
+   Short, decelerating, and only ever on something that just changed: a pane arriving, a card
+   entering, the view pill sliding. Nothing loops except the critical-alert pulse and a running
+   pipeline step, both of which already had reduced-motion rules. */
+@keyframes pane-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes drop-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes bar-grow {
+  from { transform: translateX(-50%) scaleY(0); }
+  to { transform: translateX(-50%) scaleY(1); }
+}
+
+/* One switch for everything above: a reader who asked for less motion gets the end state at once.
+   Transitions are cut to near zero rather than removed, so anything waiting on transitionend
+   still hears it. */
+@media (prefers-reduced-motion: reduce) {
+  .panel-body,
+  .timeline,
+  .map-legend,
+  .timeline-strip-bar {
+    animation: none;
+  }
+
+  .view-switch::before,
+  .view-switch .seg-btn,
+  .radio .dot,
+  .panel-tabs button,
+  .timeline-play,
+  .timeline-badge,
+  .rain-stop span,
+  .timeline input[type='range']::-webkit-slider-thumb {
+    transition-duration: 0.01ms;
+  }
+}
+
+/* ---- The point forecast popup (src/fieldSample.ts) ---- */
+.pt {
+  min-width: 240px;
+}
+
+.pt p {
+  margin: 0;
+}
+
+.pt-where {
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--ink-3);
+}
+
+.pt-now {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: 8px !important;
+  font-size: 11px;
+  color: var(--ink-2);
+}
+
+.pt-now strong {
+  font-size: 13px;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.pt-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  height: 44px;
+  margin-top: 8px;
+  padding: 0 1px;
+  border-bottom: 1px solid var(--line-2);
+}
+
+.pt-bar {
+  flex: 1 1 0;
+  min-width: 1px;
+  border-radius: 1.5px 1.5px 0 0;
+  transform-origin: bottom;
+  animation: pt-grow 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.pt-bar.is-current {
+  outline: 1.5px solid var(--ink);
+  outline-offset: 0;
+}
+
+.pt-axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 2px;
+  font-size: 9.5px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.pt-peak {
+  margin-top: 6px !important;
+  font-size: 11px;
+  color: var(--ink-2);
+}
+
+.pt-note {
+  margin-top: 6px !important;
+  font-size: 9.5px;
+  line-height: 1.45;
+  color: var(--ink-3);
+}
+
+@keyframes pt-grow {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pt-bar {
+    animation: none;
   }
 }

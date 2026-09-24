@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { CountUp } from './CountUp'
 
 import {
   EARLY_COLOR,
@@ -552,6 +553,7 @@ export function Panel({
           </Field>
 
           <Field label="Data &amp; updates">{pipelineSummary}</Field>
+          <footer className="panel-foot is-inline">{footer}</footer>
         </div>
 
       <div className="panel-body" id="panel-layers" role="tabpanel" aria-labelledby="tab-layers" hidden={view !== 'floods' || tab !== 'layers'}>
@@ -566,19 +568,19 @@ export function Panel({
         {totals.places ? (
           <div className="summary-band">
             <div className="summary-cell">
-              <span className="summary-value">{totals.people.toLocaleString()}</span>
+              <span className="summary-value"><CountUp value={totals.people} /></span>
               <span className="summary-label">people exposed</span>
             </div>
             <div className="summary-cell">
-              <span className="summary-value">{Math.round(totals.flooded).toLocaleString()}</span>
+              <span className="summary-value"><CountUp value={Math.round(totals.flooded)} /></span>
               <span className="summary-label">km² flooded</span>
             </div>
             <div className="summary-cell">
-              <span className="summary-value">{Math.round(totals.cropland).toLocaleString()}</span>
+              <span className="summary-value"><CountUp value={Math.round(totals.cropland)} /></span>
               <span className="summary-label">km² cropland</span>
             </div>
             <div className="summary-cell">
-              <span className="summary-value">{totals.places.toLocaleString()}</span>
+              <span className="summary-value"><CountUp value={totals.places} /></span>
               <span className="summary-label">townships</span>
             </div>
             {/* The biggest numbers on the page had nothing on them saying when they were true. */}
@@ -675,6 +677,7 @@ export function Panel({
         >
           <div className="pipeline-summary">{pipelineSummary}</div>
         </Field>
+        <footer className="panel-foot is-inline">{footer}</footer>
       </div>
 
       <div id="panel-assistant" role="tabpanel" aria-labelledby="tab-assistant" hidden={tab !== 'assistant'} className="panel-pane">
@@ -688,7 +691,10 @@ export function Panel({
         />
       </div>
 
-      <footer className="panel-foot">{footer}</footer>
+      {/* Pinned under the panes on a desktop. On a phone the sheet is 62% of the screen and this
+          took nearly half of it, leaving the controls a sliver to scroll in — so there it is the
+          last thing in each pane instead (the copies above), and scrolls with the content. */}
+      <footer className="panel-foot is-pinned">{footer}</footer>
     </section>
   )
 }

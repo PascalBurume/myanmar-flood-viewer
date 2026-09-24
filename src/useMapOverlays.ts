@@ -4,6 +4,8 @@ import maplibregl from 'maplibre-gl'
 import { toFeatureCollections, type CycloneDoc, type CycloneShow } from './cyclones'
 import {
   activeRun,
+  WIND_CLASSES,
+  arrowId,
   arrowImage,
   findModel,
   frameUrl,
@@ -46,7 +48,16 @@ export interface OverlayState {
   cyclones: { doc: CycloneDoc | null; show: CycloneShow }
   /** The gridded forecast field, drawn under everything the flood map is about. */
   field: FieldState
+  /**
+   * Quieten the flood layers. The Weather view is a reading of the sky, and the exposure circles —
+   * the loudest thing on the Floods map by design — sat on top of the rain field and hid it. They
+   * stay drawn, faint, so the two can still be read against each other.
+   */
+  dimFloods: boolean
 }
+
+/** How far the flood layers are quietened in the Weather view. */
+const FLOOD_DIM = 0.3
 
 // ---- the forecast field ----
 //
@@ -55,7 +66,7 @@ export interface OverlayState {
 // round trip per tile. `raster-resampling: 'nearest'` keeps the blocks square — they are the
 // sampling grid, and smoothing them would draw detail the model does not have.
 
-const FIELD = { img: 'field-img', layer: 'field', wind: 'field-wind', arrow: 'wind-arrow' } as const
+const FIELD = { img: 'field-img', layer: 'field', wind: 'field-wind' } as const
 
 /** A frame that has not loaded yet, so the source always has something valid in it. */
 const BLANK = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
@@ -222,6 +233,10 @@ export function useMapOverlays(
   clickRef.current = onClick
   const timeRef = useRef(validTime)
   timeRef.current = validTime
+  /** The arrow icons are drawn per theme and re-added on every style load, which is what a theme
+   *  switch is — so the handler needs the theme as it is now, not as it was at mount. */
+  const themeRef = useRef(theme)
+  themeRef.current = theme
   /** The rain date currently loaded into the source, so a change can be detected and re-pointed. */
   const rainDate = useRef('')
   /** What the cyclone sources currently hold, so a scrub or a refreshed file can be detected. */
@@ -264,11 +279,25 @@ export function useMapOverlays(
     const seq = ++fieldSeq.current
     const src = map.getSource(FIELD.img) as maplibregl.ImageSource | undefined
     if (!src) return
-    if (seq === fieldSeq.current) {
-      void src.updateImage({ url: url ?? BLANK, coordinates })
-    }
-    map.setLayoutProperty(FIELD.layer, 'visibility', field.on && url ? 'visible' : 'none')
     map.setPaintProperty(FIELD.layer, 'raster-opacity', field.opacity)
+    if (!url) {
+      src.updateImage({ url: BLANK, coordinates })
+      map.setLayoutProperty(FIELD.layer, 'visibility', 'none')
+      return
+    }
+    // Decode first, swap after. `updateImage` fetches and uploads on its own schedule, so two
+    // quick steps could land in either order — the guard this replaced compared a counter with
+    // itself a line after incrementing it, and never fired. Decoding here makes the swap a cache
+    // hit, lets the previous frame stay on screen until the next is ready (no blank flash during
+    // playback), and gives the counter something real to guard.
+    const img = new Image()
+    img.src = url
+    const swap = () => {
+      if (seq !== fieldSeq.current || mapRef.current !== map || !map.getSource(FIELD.img)) return
+      src.updateImage({ url, coordinates })
+      map.setLayoutProperty(FIELD.layer, 'visibility', stateRef.current.field.on ? 'visible' : 'none')
+    }
+    img.decode().then(swap, swap)
   })
 
   /** Re-point the cyclone sources at the collections for the current file and moment. */
@@ -294,7 +323,7 @@ export function useMapOverlays(
   const addOverlays = useRef(() => {
     const map = mapRef.current
     if (!map) return
-    const { index, kindVisible, kindOpacity, datasetVisible } = stateRef.current
+    const { index, kindVisible, kindOpacity, datasetVisible, dimFloods } = stateRef.current
 
     // Insert below the basemap's first symbol layer so place names stay readable through the fill.
     const before = map.getStyle().layers.find((l) => l.type === 'symbol')?.id
@@ -383,7 +412,7 @@ export function useMapOverlays(
       for (const ds of index.datasets) {
         if (!ds.layers[kind.key]) continue
         const on = kindVisible[kind.key] && datasetVisible[ds.id] ? 'visible' : 'none'
-        const o = kindOpacity[kind.key] ?? 0.7
+        const o = (kindOpacity[kind.key] ?? 0.7) * (dimFloods ? FLOOD_DIM : 1)
         for (const spec of kind.specs(ds.id)) {
           if (!map.getLayer(spec.id)) continue
           map.setLayoutProperty(spec.id, 'visibility', on)
@@ -391,7 +420,7 @@ export function useMapOverlays(
           // Fill and outline use different paint properties; clamp the outline so a boundary does
           // not disappear entirely at low opacity.
           if (spec.type === 'fill') map.setPaintProperty(spec.id, 'fill-opacity', o)
-          else if (spec.type === 'line') map.setPaintProperty(spec.id, 'line-opacity', Math.max(o, 0.4))
+          else if (spec.type === 'line') map.setPaintProperty(spec.id, 'line-opacity', Math.max(o, dimFloods ? 0.15 : 0.4))
           else if (spec.type === 'circle') {
             map.setPaintProperty(spec.id, 'circle-opacity', o * 0.8)
             map.setPaintProperty(spec.id, 'circle-stroke-opacity', o)
@@ -402,10 +431,11 @@ export function useMapOverlays(
 
     // Wind arrows sit above the floods but below the storm tracks. `setStyle` drops registered
     // images along with the sources, so the icon is re-added here rather than once at startup.
-    if (!map.hasImage(FIELD.arrow)) {
-      const img = arrowImage()
-      if (img) map.addImage(FIELD.arrow, img, { pixelRatio: 2 })
-    }
+    WIND_CLASSES.forEach((_, cls) => {
+      if (map.hasImage(arrowId(cls))) return
+      const img = arrowImage(cls, themeRef.current)
+      if (img) map.addImage(arrowId(cls), img, { pixelRatio: 2 })
+    })
     if (!map.getSource(FIELD.wind)) {
       map.addSource(FIELD.wind, { type: 'geojson', data: empty })
     }
@@ -416,13 +446,23 @@ export function useMapOverlays(
           type: 'symbol',
           source: FIELD.wind,
           layout: {
-            'icon-image': FIELD.arrow,
+            'icon-image': ['concat', 'wind-arrow-', ['to-string', ['get', 'cls']]],
             'icon-rotate': ['get', 'rot'],
             'icon-rotation-alignment': 'map',
-            'icon-allow-overlap': false,
+            // Every arrow is drawn. With collision on, the place labels won the space and whole
+            // districts came out arrowless — which reads as calm, the opposite of a measurement.
+            // The layer sits under the symbol layers, so a label still draws over an arrow, and
+            // ignoring placement means an arrow never pushes a label off the map either.
+            'icon-allow-overlap': true,
+            'icon-ignore-placement': true,
             // Monsoon surface winds over Myanmar are often only a few km/h, so the floor has to
-            // be large enough to read at all; the range still separates a breeze from a gale.
-            'icon-size': ['interpolate', ['linear'], ['get', 'kmh'], 0, 0.6, 20, 0.95, 60, 1.5],
+            // be large enough to read at all; colour carries the rest of the scale. Shrunk when
+            // zoomed out, where a 1° grid is only twenty-odd pixels apart.
+            'icon-size': [
+              'interpolate', ['linear'], ['zoom'],
+              4, ['interpolate', ['linear'], ['get', 'kmh'], 0, 0.36, 20, 0.5, 60, 0.72],
+              6, ['interpolate', ['linear'], ['get', 'kmh'], 0, 0.55, 20, 0.78, 60, 1.1],
+            ],
           },
         },
         before,
@@ -486,10 +526,31 @@ export function useMapOverlays(
         const features = map.queryRenderedFeatures(e.point, { layers: ids })
         clickRef.current(features, e.lngLat)
       })
+      let hovered: { source: string; id: string | number } | null = null
+      const unhover = () => {
+        if (hovered && map.getSource(hovered.source)) map.setFeatureState(hovered, { hover: false })
+        hovered = null
+      }
+      map.on('mouseout', unhover)
       map.on('mousemove', (e) => {
         const ids = [...cycloneQueryableIds(), ...fieldQueryableIds(), ...queryableLayerIds(stateRef.current.index)].filter((id) => map.getLayer(id))
-        const hit = ids.length > 0 && map.queryRenderedFeatures(e.point, { layers: ids }).length > 0
-        map.getCanvas().style.cursor = hit ? 'pointer' : ''
+        const hits = ids.length ? map.queryRenderedFeatures(e.point, { layers: ids }) : []
+        const hit = hits.length > 0
+        // Hover ring on the exposure circle on top, the one a click would describe first. Not on
+        // the Weather view, where the circles are faint background and a click asks the forecast.
+        const circle = stateRef.current.dimFloods ? undefined : hits.find((f) => f.layer.type === 'circle' && f.layer.id.includes('--exposure-'))
+        const next = circle && circle.id !== undefined ? { source: circle.source, id: circle.id } : null
+        if (next?.source !== hovered?.source || next?.id !== hovered?.id) {
+          unhover()
+          if (next) {
+            map.setFeatureState(next, { hover: true })
+            hovered = next
+          }
+        }
+        // A crosshair over the forecast: anywhere on it can be clicked for the point forecast.
+        const { field, dimFloods } = stateRef.current
+        const probe = dimFloods && field.on && field.layer !== 'wind'
+        map.getCanvas().style.cursor = hit ? 'pointer' : probe ? 'crosshair' : ''
       })
     })()
 

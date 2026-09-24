@@ -421,8 +421,22 @@ A second reading of the same map, switched in the panel header and deep-linkable
 `?view=weather` — the URL hash belongs to MapLibre, which writes the camera there on every move, so
 the view goes in the query string. Modelled on [Google Weather Lab](https://deepmind.google/science/weatherlab/):
 a **Model** radio, a stack of **Layers**, the tropical-cyclone card, a timeline under the map and a
-key bottom-right. The flood layers keep drawing underneath — a storm belongs on the same map as the
-water it leaves behind — and switching views never resets what the reader turned on.
+key bottom-right. Choosing it turns the forecast on and frames the region the forecast covers. The
+flood layers keep drawing underneath, faint — a storm belongs on the same map as the water it
+leaves behind, but the weather is what this view is about — and switching views never resets what
+the reader turned on.
+
+**It opens on the present**, not on the first step of the run, which is hours old by the time
+anyone looks. Above the timeline's slider a strip shows, for every step, how much of the map the
+layer covers and the colour of its heaviest block, so *when does it arrive?* is answered before
+anyone presses play; a dashed tick marks now. The key says in words what the step holds —
+including "nothing reaches 25 mm at any step of this run", so an empty probability map is not
+mistaken for one that failed to load.
+
+**Click anywhere on the forecast** for the forecast there: the block's class at the moment shown,
+the heaviest step of the run, and a bar per step for the week. It is read from the same frames the
+map draws, and it reports the key's ranges (10–20 mm), never a single figure — the frames hold no
+finer one.
 
 **The models are real choices, not a decoration.** ECMWF IFS 0.25° (the baseline everyone else is
 measured against), GFS and ICON, all from [Open-Meteo](https://open-meteo.com/) — public, keyless,
@@ -434,7 +448,7 @@ the pipeline's own stage record, until the Google access below arrives.
 | Precipitation | Rain per three-hour step, as a paletted PNG per step |
 | Probability > 25 mm / 3 h | Share of the **51-member ECMWF ensemble** over the threshold |
 | Probability > 50 mm / 3 h | The same for the amount that turns a wet day into a flooding one |
-| Wind 10 m | Arrows pointing downwind, sized by speed, sampled every 1° |
+| Wind 10 m | Arrows pointing downwind, coloured and sized by speed, sampled every 1° |
 
 **Only ECMWF publishes its run time.** Open-Meteo exposes `last_run_initialisation_time` for it and
 nothing for GFS or ICON, so those say **"run time not published"** everywhere they appear — in the

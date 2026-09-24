@@ -357,6 +357,48 @@ Traps recorded:
 - **The legend follows `field.on`, not the view**: a forecast carries its model and run time
   wherever it is drawn.
 
+### What an audit of the Weather view found (Sept 2026)
+
+The view "did not work well", and it did not — several faults, each small, together made it look
+broken:
+
+- **Choosing Weather left the forecast off.** `fieldOn` was only ever set from the URL at load, so
+  the button showed the controls over the same flood map, zoomed on a district. `selectView()` now
+  turns the field on and frames `manifest.grid`; leaving the view keeps the field as it was.
+- **The map and the timeline showed different moments.** The timeline resolved a null `validTime`
+  to its first frame (a storm fix, badged *Observed*); the map resolved it to the field's first
+  step. One `shownTime` now feeds both, and it is the frame nearest the present (`frameNearest`).
+- **The first step of every run was the previous run's**, and lead hours were counted from the
+  first step rather than the init — an 18Z run read the next morning called a nine-hour lead
+  three. `usable_steps()` decides both at write time; `normalise_steps()` repairs runs already on
+  disk on every manifest build, and the assistant's `forecast_field` takes point values only for
+  the manifest's steps, since `points.json` is never rewritten. The old test pinned the bug.
+- **`.field-note` had no CSS rule at all**, so the run-time footnote was the largest text in the
+  panel at the browser's 16px.
+- **Wind arrows were hidden by label collision** over whole districts, which reads as calm. They
+  now ignore placement and sit under the symbol layers, are coloured by speed class
+  (`WIND_CLASSES`, one table for arrows and key), and are drawn per theme — the images are
+  re-registered on every `style.load`, which is what a theme switch is.
+- **The frame-order guard never fired**: it compared a counter with itself a line after
+  incrementing it. `syncField` now decodes the next frame first and swaps only if still newest,
+  which also keeps the old frame on screen until the new one is ready.
+- **The timeline appeared on the Floods view** carrying only a distant storm's fixes. It now shows
+  on the Weather view or wherever the field is on.
+
+Added with it: per-frame `stats` (`peak` class, `wet` share) in the manifest, read back from each
+PNG and cached in a `stats.json` sidecar so run directories stay write-once; the timeline strip and
+the key's reading are drawn from them. The point forecast (`src/fieldSample.ts`) samples the same
+PNGs — Mercator rows, the inverse of `mercator_rows()` — and reports **classes, never figures**.
+The flood layers are multiplied by `FLOOD_DIM` on the Weather view.
+
+**Layout:** `--legend-w` is the key's column; the timeline is positioned by `left`/`right` with an
+auto margin and subtracts it, and below 1,100px the key moves up out of the timeline's band. The
+header wraps to two rows so the view switch has its own (the title had been cut to "Myanmar Fl…"),
+which made the collapsed mobile header taller — the offsets under `@media (max-width: 640px)` for
+the map controls, basemap switch and imagery pill follow from it. On a phone the footer scrolls
+with each pane (`.panel-foot.is-inline`) instead of taking half of the 62vh sheet, and the basemap
+switch hides while the sheet is open, where it used to sit on top of the sheet.
+
 ## Monitoring
 
 Three layers, added together, each answering a question the others cannot.
@@ -731,6 +773,7 @@ not a pipeline. Python's `zipfile` stands in for `unzip`.
 - [x] add a grounded assistant in the panel: client-side tool loop, key-holding server proxy
 - [x] add tropical cyclone tracks (IBTrACS + JTWC, public) with a timeline scrubber — Weather Lab, phase 1
 - [x] add the Weather view: Open-Meteo forecast field (ECMWF / GFS / ICON + 51-member ensemble), model radio, init stepper, map legend
+- [x] audit and repair the Weather view: step timing, one shared moment, opening on now, intensity strip, point forecast, legible wind, mobile layout, motion
 - [ ] WeatherNext 3 gridded field + ensemble cyclone tracks once Google allow-list access arrives (phases 2–3)
 - [ ] decide whether to extend or stop the scan when `SCAN_UNTIL` (2026-09-14) is reached
 - [ ] add drawing code if a new layer kind arrives (anything outside `LAYER_KINDS`:

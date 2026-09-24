@@ -15,12 +15,23 @@ import { useEffect, useState } from 'react'
 export type FieldLayer = 'precip' | 'prob25' | 'prob50' | 'wind'
 export type FieldModelKey = 'ecmwf' | 'gfs' | 'icon' | 'weathernext'
 
+/** What a frame holds, read back from its own pixels by the pipeline. */
+export interface FrameStats {
+  /** Highest legend class anywhere on the frame: 0 is nothing drawn, 1 is the first stop. */
+  peak: number
+  /** Share of the frame's area with any class at all, 0–1. */
+  wet: number
+}
+
 export interface FieldStep {
+  /** Lead hours from the run's init — or, for a model that publishes none, from the fetch. */
   h: number
   valid: string
   precip?: string
   prob25?: string
   prob50?: string
+  /** Absent for a manifest written before the pipeline recorded it. */
+  stats?: Partial<Record<'precip' | 'prob25' | 'prob50', FrameStats>>
 }
 
 export interface FieldRun {
@@ -200,6 +211,61 @@ export function fieldFrames(run: FieldRun | null): Array<{ t: string; isForecast
   return (run?.steps ?? []).map((s) => ({ t: s.valid, isForecast: true }))
 }
 
+/** The legend a layer is classified with, or null for wind, which has none. */
+export function legendFor(manifest: FieldManifest | null, layer: FieldLayer): LegendStops | null {
+  if (!manifest || layer === 'wind') return null
+  return layer === 'precip' ? manifest.legends.precip3h : manifest.legends.prob
+}
+
+/** One step's stats for the layer on show, or null when the manifest does not carry them. */
+export function stepStats(step: FieldStep | null, layer: FieldLayer): FrameStats | null {
+  if (!step || layer === 'wind') return null
+  return step.stats?.[layer] ?? null
+}
+
+/**
+ * The frame to open on: the one nearest the reader's present.
+ *
+ * The first frame of a run is hours old by the time anyone looks at it, and opening there showed a
+ * forecast for a moment already past as though it were the headline. Clamped to the ends, so a run
+ * that is entirely in the past opens on its last frame rather than on nothing.
+ */
+export function frameNearest(frames: Array<{ t: string }>, at: number): string | null {
+  if (!frames.length) return null
+  let best = frames[0].t
+  let bestDt = Infinity
+  for (const f of frames) {
+    const dt = Math.abs(Date.parse(f.t) - at)
+    if (dt < bestDt) {
+      best = f.t
+      bestDt = dt
+    }
+  }
+  return best
+}
+
+/**
+ * The intensity strip drawn over the timeline: for each frame, how much of the map the layer
+ * covers and the colour of its heaviest block. Lets a reader see when the weather arrives before
+ * scrubbing to it. Frames the field does not cover (a storm fix between steps) get null, and a
+ * manifest without stats gives an empty strip rather than a flat one that would read as "dry".
+ */
+export function fieldStrip(
+  frames: Array<{ t: string }>,
+  run: FieldRun | null,
+  layer: FieldLayer,
+  legend: LegendStops | null,
+  stepHours = 3,
+): Array<{ wet: number; colour: string | null } | null> {
+  if (!run || !legend || !run.steps.some((s) => s.stats)) return []
+  const byTime = new Map(run.steps.map((s) => [s.valid, s]))
+  return frames.map((f) => {
+    const st = stepStats(byTime.get(f.t) ?? nearestStep(run, f.t, stepHours), layer)
+    if (!st) return null
+    return { wet: st.wet, colour: st.peak > 0 ? legend.stops[Math.min(st.peak, legend.stops.length) - 1][1] : null }
+  })
+}
+
 /**
  * One timeline across both systems.
  *
@@ -245,6 +311,7 @@ export function windFeatures(doc: WindDoc | null, t: string | null): GeoJSON.Fea
           ms: Math.round((kmh / 3.6) * 10) / 10,
           dir,
           rot: (dir + 180) % 360,
+          cls: windClass(kmh),
           t: step.valid,
           source: 'forecast',
         },
@@ -255,29 +322,62 @@ export function windFeatures(doc: WindDoc | null, t: string | null): GeoJSON.Fea
 }
 
 /**
- * The arrow icon, drawn once on a canvas.
- *
- * `setStyle` drops every registered image along with the sources, so this is re-added on each
- * style load rather than kept — and it is drawn rather than fetched so the page still contacts
- * nothing but its own files.
+ * Wind speed classes, km/h. Colour carries speed as well as size, because size alone was the
+ * whole signal before and the arrows read as a uniform scatter of specks: monsoon surface winds
+ * here sit in a narrow band, and a few pixels of difference is not something anyone sees.
+ * Lower bounds; the same table draws the arrows and the key.
  */
-export function arrowImage(): ImageData | null {
-  const size = 44
+export const WIND_CLASSES: Array<{ min: number; label: string; light: string; dark: string }> = [
+  { min: 0, label: 'under 10', light: '#5b7896', dark: '#a9c1d9' },
+  { min: 10, label: '10–20', light: '#1f6fd1', dark: '#6fb0ff' },
+  { min: 20, label: '20–40', light: '#7a3fc2', dark: '#c49bff' },
+  { min: 40, label: '40 and over', light: '#d2410c', dark: '#ff9255' },
+]
+
+export function windClass(kmh: number): number {
+  let c = 0
+  WIND_CLASSES.forEach((w, i) => {
+    if (kmh >= w.min) c = i
+  })
+  return c
+}
+
+export const arrowId = (cls: number) => `wind-arrow-${cls}`
+
+/**
+ * One arrow icon per speed class, drawn on a canvas: a shaft and a head, the way wind is drawn on
+ * every chart a reader has seen, rather than the bare chevron that preceded it.
+ *
+ * `setStyle` drops every registered image along with the sources, so these are re-added on each
+ * style load rather than kept — which is also what lets them follow the theme — and they are drawn
+ * rather than fetched so the page still contacts nothing but its own files.
+ */
+export function arrowImage(cls: number, theme: 'light' | 'dark'): ImageData | null {
+  const size = 64
   const c = document.createElement('canvas')
   c.width = c.height = size
   const g = c.getContext('2d')
   if (!g) return null
   g.translate(size / 2, size / 2)
-  g.beginPath()
-  g.moveTo(0, -16)
-  g.lineTo(9, 6)
-  g.lineTo(0, 1)
-  g.lineTo(-9, 6)
-  g.closePath()
-  g.fillStyle = '#1b3a5c'
-  g.strokeStyle = 'rgba(255,255,255,0.9)'
-  g.lineWidth = 2.5
+  g.lineJoin = 'round'
+  g.lineCap = 'round'
+  const path = () => {
+    g.beginPath()
+    g.moveTo(0, -24) // tip
+    g.lineTo(11, -6)
+    g.lineTo(3.5, -8)
+    g.lineTo(3.5, 22)
+    g.lineTo(-3.5, 22)
+    g.lineTo(-3.5, -8)
+    g.lineTo(-11, -6)
+    g.closePath()
+  }
+  path()
+  g.lineWidth = 5
+  g.strokeStyle = theme === 'dark' ? 'rgba(10,12,16,0.85)' : 'rgba(255,255,255,0.95)'
   g.stroke()
+  path()
+  g.fillStyle = WIND_CLASSES[cls][theme]
   g.fill()
   return g.getImageData(0, 0, size, size)
 }

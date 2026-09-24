@@ -17,8 +17,13 @@ import { MapLegend } from './components/MapLegend'
 import {
   activeRun,
   fieldFrames,
+  fieldStrip,
+  findModel,
+  frameNearest,
   frameUrl,
+  legendFor,
   mergeFrames,
+  modelForLayer,
   nearestStep,
   runsFor,
   useForecastField,
@@ -36,6 +41,7 @@ import {
   type Storm,
 } from './cyclones'
 import { formatMMT as formatTime } from './time'
+import { seriesAt, seriesPopupHtml } from './fieldSample'
 import { useExposure } from './components/TopAffected'
 import { useHistory } from './components/Trend'
 import { Alerts } from './components/Alerts'
@@ -235,6 +241,28 @@ export function App({ initialIndex }: { initialIndex: DataIndex }) {
     () => mergeFrames(cycloneFrames(cyclones), fieldOn ? fieldFrames(fieldRunDoc) : [], observedTo),
     [cyclones, fieldOn, fieldRunDoc, observedTo],
   )
+  /**
+   * The timeline belongs to the Weather view, and to the field wherever it is drawn. On the Floods
+   * view with the field off it used to appear anyway, carrying nothing but the fixes of a storm
+   * that may be a thousand kilometres off-screen.
+   */
+  const timelineOn = view === 'weather' || fieldOn
+  /**
+   * The moment on show. `validTime` is null until the reader moves the scrubber, and the opening
+   * moment used to be resolved twice: the timeline showed its first frame (a storm fix, badged
+   * Observed) while the map drew the field's first step, hours later — two different moments on
+   * screen at once. Now there is one answer, the frame nearest the present, and both read it.
+   */
+  const openingTime = useMemo(() => frameNearest(frames, Date.now()), [frames])
+  const shownTime = timelineOn ? (validTime ?? openingTime) : null
+  const shownStep = useMemo(
+    () => (fieldOn ? nearestStep(fieldRunDoc, shownTime, fieldManifest?.stepHours ?? 3) : null),
+    [fieldOn, fieldRunDoc, shownTime, fieldManifest],
+  )
+  const strip = useMemo(
+    () => (fieldOn ? fieldStrip(frames, fieldRunDoc, fieldLayer, legendFor(fieldManifest, fieldLayer), fieldManifest?.stepHours ?? 3) : []),
+    [fieldOn, frames, fieldRunDoc, fieldLayer, fieldManifest],
+  )
   const runList = useMemo(() => runsFor(fieldManifest, fieldModel, fieldLayer), [fieldManifest, fieldModel, fieldLayer])
   const runIndex = Math.max(runList.findIndex((r) => r.key === (fieldRunDoc?.key ?? '')), 0)
   /** Step to an older or newer run of the same model, keeping the reader near the same moment. */
@@ -243,10 +271,10 @@ export function App({ initialIndex }: { initialIndex: DataIndex }) {
       const next = runList[runIndex + dir]
       if (!next) return
       setFieldRun(next.key)
-      const step = nearestStep(next, validTime ?? observedTo, fieldManifest?.stepHours ?? 3)
+      const step = nearestStep(next, shownTime ?? observedTo, fieldManifest?.stepHours ?? 3)
       if (step) setValidTime(step.valid)
     },
-    [runList, runIndex, validTime, observedTo, fieldManifest],
+    [runList, runIndex, shownTime, observedTo, fieldManifest],
   )
   /** Why WeatherNext is not among the models, in the pipeline's own words. */
   const weathernextReason = useMemo(
@@ -255,6 +283,8 @@ export function App({ initialIndex }: { initialIndex: DataIndex }) {
   )
 
 
+  /** Point-forecast reads are async; only the newest click may fill the popup. */
+  const pointQuery = useRef(0)
   const onMapClick = useCallback(
     (features: maplibregl.MapGeoJSONFeature[], lngLat: maplibregl.LngLat) => {
       // Record the spot whether or not anything was under it: "nothing is drawn here" is a
@@ -270,18 +300,53 @@ export function App({ initialIndex }: { initialIndex: DataIndex }) {
 
       const popup = popupRef.current
       if (!popup) return
-      if (!features.length) {
+      const pointSeq = ++pointQuery.current
+
+      // On the Weather view the flood layers are drawn faint and are not what a click is about:
+      // a storm or a wind arrow under the pointer still answers, anything else asks the forecast.
+      const own = view === 'weather' ? features.filter((f) => f.layer.id.startsWith('cyclones--') || f.layer.id.startsWith('field-')) : features
+      const legend = legendFor(fieldManifest, fieldLayer)
+      const model = findModel(fieldManifest, modelForLayer(fieldModel, fieldLayer))
+      if (!own.length && fieldOn && legend && model && fieldRunDoc) {
+        const { lng, lat } = lngLat
+        popup
+          .setLngLat(lngLat)
+          .setHTML('<div class="pop-head">Forecast here</div><div class="pop-body pt"><p class="pt-where">Reading the run…</p></div>')
+          .addTo(mapRef.current!)
+        void seriesAt(BASE_URL, model, fieldRunDoc, fieldLayer, legend, lng, lat, shownStep?.valid ?? null).then((series) => {
+          // A later click owns the popup now.
+          if (pointSeq !== pointQuery.current) return
+          if (!series) {
+            popup.setHTML('<div class="pop-head">Forecast here</div><div class="pop-body pt"><p class="pt-where">Outside the forecast grid, which covers 92–102°E and 9.5–28.5°N.</p></div>')
+            return
+          }
+          popup.setHTML(
+            seriesPopupHtml({
+              series,
+              legend,
+              layer: fieldLayer,
+              modelLabel: model.label,
+              run: fieldRunDoc,
+              lon: lng,
+              lat,
+              cellDeg: Math.round(((model.bbox[2] - model.bbox[0]) / model.size[0]) * 100) / 100,
+            }),
+          )
+        })
+        return
+      }
+      if (!own.length) {
         popup.remove()
         return
       }
-      popup.setLngLat(lngLat).setHTML(popupHtml(features, headings)).addTo(mapRef.current!)
+      popup.setLngLat(lngLat).setHTML(popupHtml(own, headings)).addTo(mapRef.current!)
     },
-    [headings, places],
+    [headings, places, view, fieldManifest, fieldLayer, fieldModel, fieldOn, fieldRunDoc, shownStep],
   )
 
   const overlayState = useMemo(
-    () => ({ index, kindVisible, kindOpacity, datasetVisible, rain, cyclones: cyclonesState, field }),
-    [index, kindVisible, kindOpacity, datasetVisible, rain, cyclonesState, field],
+    () => ({ index, kindVisible, kindOpacity, datasetVisible, rain, cyclones: cyclonesState, field, dimFloods: view === 'weather' }),
+    [index, kindVisible, kindOpacity, datasetVisible, rain, cyclonesState, field, view],
   )
 
   const { mapRef, addOverlays, applyIndex } = useMapOverlays(
@@ -292,7 +357,7 @@ export function App({ initialIndex }: { initialIndex: DataIndex }) {
     imageryDate,
     initialCamera as unknown as maplibregl.MapOptions,
     onMapClick,
-    validTime,
+    shownTime,
   )
 
   const zoomToStorm = useCallback(
@@ -421,6 +486,13 @@ const zoomTo = useCallback(
   /** The camera move alone. Split out because the assistant's fit_all tool must move the map
    *  without also closing a dialog the reader had open. */
   const fitAllCamera = useCallback(() => {
+    // "All the data" depends on the reading: the forecast grid covers the country and its
+    // approaches, the flood datasets only where water was found.
+    if (view === 'weather' && fieldManifest) {
+      const g = fieldManifest.grid
+      mapRef.current?.fitBounds([g.west, g.south, g.east, g.north], { padding: fitPadding, duration: 800 })
+      return
+    }
     const boxes = index.datasets.map((d) => d.bbox).filter((b): b is [number, number, number, number] => !!b)
     if (!boxes.length) return
     mapRef.current?.fitBounds(
@@ -430,9 +502,54 @@ const zoomTo = useCallback(
         Math.max(...boxes.map((b) => b[2])),
         Math.max(...boxes.map((b) => b[3])),
       ],
-      { padding: fitPadding },
+      { padding: fitPadding, duration: 800 },
     )
-  }, [index, fitPadding, mapRef])
+  }, [index, fitPadding, mapRef, view, fieldManifest])
+
+  /**
+   * Switching reading. Choosing Weather used to leave the forecast switched off and the camera
+   * zoomed on a flood district, so the view opened on the same map with a different panel — it
+   * looked broken. It now turns the field on and frames the region the forecast covers; leaving
+   * it keeps the field as the reader set it, since a forecast can be read over the floods too.
+   */
+  const selectView = useCallback(
+    (v: 'floods' | 'weather', frame = true) => {
+      setView(v)
+      if (v !== 'weather') return
+      setFieldOn(true)
+      setValidTime(null)
+      const g = fieldManifest?.grid
+      if (frame && g) mapRef.current?.fitBounds([g.west, g.south, g.east, g.north], { padding: fitPadding, duration: 900 })
+    },
+    [fieldManifest, fitPadding, mapRef],
+  )
+
+  /**
+   * A link straight to `?view=weather` opened on the flood datasets' camera, since that is what the
+   * constructor is given and the forecast manifest arrives later. Frame the forecast once it does —
+   * unless the URL carried a camera of its own, which is the reader's and wins.
+   */
+  const [hadCamera] = useState(() => /^#\d/.test(window.location.hash))
+  const framedWeather = useRef(false)
+  useEffect(() => {
+    const g = fieldManifest?.grid
+    if (framedWeather.current || hadCamera || view !== 'weather' || !g) return
+    // The map is built after its style is fetched, so it can be later than the manifest. Wait
+    // for it briefly rather than miss the one chance to frame.
+    let tries = 0
+    const attempt = () => {
+      const map = mapRef.current
+      if (!map) return ++tries < 50
+      framedWeather.current = true
+      map.fitBounds([g.west, g.south, g.east, g.north], { padding: fitPadding, duration: 0 })
+      return false
+    }
+    if (!attempt()) return
+    const id = window.setInterval(() => {
+      if (!attempt()) window.clearInterval(id)
+    }, 200)
+    return () => window.clearInterval(id)
+  }, [fieldManifest, hadCamera, view, fitPadding, mapRef])
 
   const handleFitAll = useCallback(() => {
     fitAllCamera()
@@ -527,7 +644,7 @@ const zoomTo = useCallback(
       map: { basemap, imageryDate, rain, kindVisible, kindOpacity, cycloneShow, view, field, frames, query: mapQuery },
       actions: {
         setCycloneLayer: (k: CycloneLayerKey, v: boolean) => setCycloneShow((s) => ({ ...s, [k]: v })),
-        setView,
+        setView: (v: 'floods' | 'weather') => selectView(v, false),
         setValidTime,
         setPlaying,
         setField: onField,
@@ -548,7 +665,7 @@ const zoomTo = useCallback(
     [
       index, places, status, history, weather, cyclones, fieldManifest,
       basemap, imageryDate, rain, kindVisible, kindOpacity, cycloneShow, view, field, frames, onField,
-      zoomTo, handleZoom, fitAllCamera, mapQuery,
+      zoomTo, handleZoom, fitAllCamera, mapQuery, selectView,
     ],
   )
 
@@ -633,14 +750,14 @@ const zoomTo = useCallback(
         rain={rain}
         onRain={setRain}
         view={view}
-        onView={setView}
+        onView={selectView}
         field={field}
         onField={onField}
         weathernextReason={weathernextReason}
         cyclones={cyclones}
         cycloneShow={cycloneShow}
         onCycloneShow={(k, v) => setCycloneShow((s) => ({ ...s, [k]: v }))}
-        validTime={validTime}
+        validTime={shownTime}
         onZoomStorm={zoomToStorm}
         chat={chatContext}
         onRunPipeline={handleRun}
@@ -723,9 +840,11 @@ const zoomTo = useCallback(
       {showImageryDate && clearSearch ? <div className="imagery-note">{clearSearch}</div> : null}
 
       <Timeline
-        frames={frames}
-        value={validTime ?? frames[0]?.t ?? observedTo}
+        frames={timelineOn ? frames : []}
+        value={shownTime}
         onChange={setValidTime}
+        strip={strip}
+        leadHours={fieldOn && fieldRunDoc?.init ? (shownStep?.h ?? null) : null}
         playing={playing}
         onPlaying={setPlaying}
         observedUntil={observedTo}
@@ -744,7 +863,7 @@ const zoomTo = useCallback(
         }
       />
 
-      <MapLegend field={field} />
+      <MapLegend field={field} step={shownStep} />
 
       <div id="basemap" className="basemap-switch" role="tablist" aria-label="Basemap">
         {(Object.keys(BASEMAP_LABELS) as Basemap[]).map((key) => (

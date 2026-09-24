@@ -258,8 +258,10 @@ export const LAYER_KINDS: LayerKind[] = [
           ],
           'circle-color': EXPOSURE_COLOR,
           'circle-opacity': 0.55,
-          'circle-stroke-color': EXPOSURE_COLOR,
-          'circle-stroke-width': 1,
+          // The township under the pointer gets a heavier ring, so it is clear which of several
+          // overlapping circles a click will describe.
+          'circle-stroke-color': ['case', ['boolean', ['feature-state', 'hover'], false], '#5c1f06', EXPOSURE_COLOR],
+          'circle-stroke-width': ['case', ['boolean', ['feature-state', 'hover'], false], 2.5, 1],
           'circle-stroke-opacity': 0.9,
         },
       } as LayerSpecification,
@@ -286,7 +288,8 @@ export function sourceSpec(
   info: DatasetLayerInfo,
   version?: string,
 ): SourceSpecification {
-  return { type: 'geojson', data: layerUrl(base, info, version), attribution: ATTRIBUTION }
+  // `generateId` so a feature can carry hover state; the files have no id of their own.
+  return { type: 'geojson', data: layerUrl(base, info, version), attribution: ATTRIBUTION, generateId: true }
 }
 
 /** At most this many overlapping features are listed for one click. */
