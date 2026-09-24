@@ -8,6 +8,7 @@
  * "worst affected" with no way for a reader to tell which to believe.
  */
 
+import type { ViewKey } from '../view'
 import {
   findPlaces,
   nationalTotals,
@@ -90,7 +91,7 @@ export interface ChatMapState {
   kindVisible: Record<string, boolean>
   kindOpacity: Record<string, number>
   cycloneShow: CycloneShow
-  view: 'floods' | 'weather'
+  view: ViewKey
   field: FieldState
   /** Every moment the timeline can show, so a tool lands on one that exists. */
   frames: Array<{ t: string; isForecast: boolean }>

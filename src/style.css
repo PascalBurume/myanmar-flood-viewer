@@ -89,6 +89,10 @@ body {
 #map {
   position: absolute;
   inset: 0;
+  /* Its own stacking context. MapLibre gives its control corners z-index 2, and without this they
+     stacked in the page's context — above the 3D view, which drew a second set of zoom buttons and
+     a geolocate button over its map. */
+  z-index: 0;
 }
 
 /* ---- Panel ---- */
@@ -705,6 +709,9 @@ body {
     right: 0;
     width: auto;
     max-height: 62vh;
+    /* Opaque on a phone: the sheet covers the map's own attribution and controls, which showed
+       through the translucent surface as stray text over the panel. */
+    background: var(--surface-solid);
     border-right: 0;
     border-top: 1px solid var(--line);
     border-radius: var(--radius) var(--radius) 0 0;
@@ -2627,7 +2634,7 @@ body {
   top: 3px;
   bottom: 3px;
   left: 3px;
-  width: calc(50% - 3px);
+  width: calc((100% - 6px) / 3);
   border-radius: 999px;
   background: var(--accent);
   box-shadow: 0 1px 3px rgba(16, 24, 40, 0.25);
@@ -2636,6 +2643,10 @@ body {
 
 .view-switch:has(.seg-btn:nth-child(2).is-on)::before {
   transform: translateX(100%);
+}
+
+.view-switch:has(.seg-btn:nth-child(3).is-on)::before {
+  transform: translateX(200%);
 }
 
 .view-switch .seg-btn {
@@ -3165,4 +3176,497 @@ body {
   padding: 7px 8px 7px 11px;
   font-size: 11.5px;
   color: var(--ink-2);
+}
+
+/* ---- The 3D view (src/components/Flood3D.tsx) ----
+   A second map over the first, with its own overlays. The panel keeps the left edge as on the other
+   views; everything here is placed in the map area to its right. */
+.basemap-switch[hidden] {
+  display: none;
+}
+
+/* Beside the panel rather than under it: the camera then centres on what the reader can see, and
+   nothing of the map shows through the panel's translucent surface. */
+.three-d {
+  position: absolute;
+  inset: 0 0 0 var(--panel-w);
+  z-index: 1;
+  background: #0d1520;
+  animation: fade-in 0.35s ease both;
+}
+
+.three-d-map {
+  position: absolute;
+  inset: 0;
+}
+
+.scene-card {
+  position: absolute;
+  top: 12px;
+  left: 16px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(520px, calc(100% - 100px));
+  padding: 9px 14px 9px 9px;
+  border: 1px solid var(--line-2);
+  border-radius: 14px;
+  background: var(--surface-solid);
+  box-shadow: var(--shadow);
+  animation: drop-in 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.scene-back {
+  flex: none;
+  font-weight: 600;
+}
+
+.scene-card-text {
+  min-width: 0;
+}
+
+.scene-card-name {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.scene-card-name::first-letter,
+.legend-3d-head::first-letter {
+  text-transform: uppercase;
+}
+
+.scene-card-sub {
+  margin: 1px 0 0;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+.three-d-loading {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 2;
+  transform: translate(-50%, -50%);
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--surface-solid);
+  box-shadow: var(--shadow);
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+/* The scene's clock. Same shell as the Weather timeline; its ticks are the observed dates. */
+.sim-bar {
+  --thumb: 16px;
+  position: absolute;
+  left: 20px;
+  right: calc(var(--legend-w) + 36px);
+  bottom: 34px;
+  max-width: 640px;
+  margin-inline: auto;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px 10px 10px;
+  border: 1px solid var(--line-2);
+  border-radius: 16px;
+  background: var(--surface-solid);
+  box-shadow: var(--shadow);
+  animation: rise-in 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.sim-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sim-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.sim-state {
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line-2);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  white-space: nowrap;
+  transition: color 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.sim-state.is-observed {
+  color: #0b5cc0;
+  border-color: #3b8ae6;
+  background: rgba(59, 138, 230, 0.1);
+}
+
+:root[data-theme='dark'] .sim-state.is-observed {
+  color: #8cc2ff;
+}
+
+.sim-state.is-simulated {
+  color: var(--warning-ink);
+  border-color: var(--warning);
+  background: repeating-linear-gradient(45deg, transparent, transparent 3px, var(--warning-tint) 3px, var(--warning-tint) 5px);
+}
+
+.sim-readout strong {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.sim-track {
+  position: relative;
+  padding-bottom: 16px;
+}
+
+.sim-track input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 18px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.sim-track input[type='range']::-webkit-slider-runnable-track {
+  height: 5px;
+  border-radius: 999px;
+  background: linear-gradient(to right, #3b8ae6 0 calc(var(--pos) * 100%), var(--track) 0);
+}
+
+.sim-track input[type='range']::-moz-range-track {
+  height: 5px;
+  border-radius: 999px;
+  background: linear-gradient(to right, #3b8ae6 0 calc(var(--pos) * 100%), var(--track) 0);
+}
+
+.sim-track input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: var(--thumb);
+  height: var(--thumb);
+  margin-top: calc((5px - var(--thumb)) / 2);
+  border: 2px solid var(--surface-solid);
+  border-radius: 50%;
+  background: #3b8ae6;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+
+.sim-track input[type='range']::-moz-range-thumb {
+  width: calc(var(--thumb) - 4px);
+  height: calc(var(--thumb) - 4px);
+  border: 2px solid var(--surface-solid);
+  border-radius: 50%;
+  background: #3b8ae6;
+}
+
+.sim-track input[type='range']:focus-visible {
+  outline: none;
+}
+
+.sim-track input[type='range']:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px var(--surface-solid), 0 0 0 5px #3b8ae6;
+}
+
+.sim-ticks {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 14px;
+  pointer-events: none;
+}
+
+.sim-ticks span {
+  position: absolute;
+  left: calc(var(--thumb) / 2 + (100% - var(--thumb)) * var(--at));
+  transform: translateX(-50%);
+  font-size: 10px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+.sim-ticks span:first-child {
+  transform: none;
+  left: 0;
+}
+
+.sim-ticks span.is-obs {
+  font-weight: 700;
+  color: var(--ink-2);
+}
+
+.sim-ticks span.is-obs:last-child {
+  transform: translateX(-100%);
+  left: 100%;
+}
+
+.sim-ticks span.is-obs::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: -12px;
+  width: 2px;
+  height: 7px;
+  border-radius: 1px;
+  background: #3b8ae6;
+}
+
+.sim-ticks span.is-obs:last-child::before {
+  left: calc(100% - var(--thumb) / 2);
+}
+
+.legend-3d {
+  position: absolute;
+  right: 10px;
+  bottom: 34px;
+  z-index: 2;
+  width: var(--legend-w);
+  padding: 9px 11px 10px;
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+  background: var(--surface-solid);
+  box-shadow: var(--shadow);
+  animation: rise-in 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.legend-3d-head {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.legend-3d-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 4px 0;
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--ink-2);
+}
+
+.legend-3d-row .swatch,
+.legend-3d-row .swatch-col,
+.legend-3d-row .swatch-pin {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+}
+
+.swatch-water {
+  background: linear-gradient(135deg, #60c4e6, #12489a);
+}
+
+.swatch-col {
+  background: linear-gradient(to top, #b23a12, #f8a36a);
+  border-radius: 2px 2px 0 0 !important;
+  width: 10px !important;
+  margin: 0 2px;
+}
+
+.swatch-pin {
+  border-radius: 50% !important;
+  background: #fff;
+  box-shadow: inset 0 0 0 3px #1d6fd6;
+}
+
+.legend-3d-note {
+  margin: 7px 0 0;
+  font-size: 9.5px;
+  line-height: 1.45;
+  color: var(--ink-3);
+}
+
+/* ---- The 3D pane (src/components/ThreeDControls.tsx) ---- */
+.td {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.td-notice {
+  flex: none;
+}
+
+.td-scenes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+}
+
+.td-scene {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+}
+
+.td-scene:hover {
+  background: var(--hover);
+}
+
+.td-scene:active {
+  transform: scale(0.99);
+}
+
+.td-scene.is-on {
+  border-color: #3b8ae6;
+  background: rgba(59, 138, 230, 0.08);
+}
+
+.td-scene:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.td-scene-name {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.td-scene-name::first-letter {
+  text-transform: uppercase;
+}
+
+.td-scene-sub {
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+.td-scene-figs {
+  display: flex;
+  flex-direction: column;
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.td-scene-figs strong {
+  color: var(--ink);
+}
+
+.td-slider {
+  padding: 4px 8px;
+}
+
+.td-slider > span {
+  width: 52px;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (max-width: 1100px) {
+  .sim-bar {
+    right: 20px;
+    bottom: calc(34px + 180px);
+  }
+}
+
+@media (max-width: 640px) {
+  .three-d {
+    left: 0;
+  }
+
+  /* Two rows on a phone: where, then the two camera buttons. */
+  .scene-card {
+    left: 10px;
+    right: 10px;
+    max-width: none;
+    flex-wrap: wrap;
+    row-gap: 6px;
+    padding: 8px 10px;
+  }
+
+  .scene-card-text {
+    flex: 1 1 60%;
+  }
+
+  .sim-bar {
+    top: 104px;
+    bottom: auto;
+    left: 10px;
+    right: 10px;
+    max-width: none;
+    padding: 8px 10px 8px 8px;
+    animation-name: drop-in;
+  }
+
+  .sim-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+  }
+
+  /* Pinch and twist do what these buttons do, and at this width they sat on the scene card. */
+  .three-d .maplibregl-ctrl-top-right {
+    display: none;
+  }
+
+  .legend-3d {
+    display: none;
+  }
+
+  .three-d-loading {
+    left: 50%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .three-d,
+  .scene-card,
+  .sim-bar,
+  .legend-3d {
+    animation: none;
+  }
+}
+
+.scene-houses {
+  flex: none;
+  border-color: #3b8ae6;
+  color: #0b5cc0;
+  font-weight: 600;
+}
+
+:root[data-theme='dark'] .scene-houses {
+  color: #8cc2ff;
+}
+
+.scene-card .mini-btn {
+  flex: none;
+  white-space: nowrap;
 }

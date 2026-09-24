@@ -10,6 +10,7 @@ import {
   type FieldStep,
 } from '../forecastField'
 import { formatMMT } from '../time'
+import type { ViewKey } from '../view'
 
 /**
  * The key for the forecast field, on the map rather than in the panel.
@@ -32,7 +33,7 @@ export function MapLegend({
 }: {
   field: FieldState
   step: FieldStep | null
-  view: 'floods' | 'weather'
+  view: ViewKey
   onField: (patch: Partial<FieldState>) => void
 }) {
   const manifest = field.manifest

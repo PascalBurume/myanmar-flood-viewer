@@ -416,3 +416,77 @@ export function gibsTileUrl(base: Basemap, date: string, z: number, x: number, y
   if (!cfg) return ''
   return `${GIBS}/${cfg.layer}/default/${date}/GoogleMapsCompatible_Level9/${z}/${y}/${x}.jpg`
 }
+
+
+// ---- The 3D view ----
+//
+// Terrain from the Terrarium tiles on AWS Open Data (Mapzen's global DEM, SRTM over Myanmar):
+// public, keyless and CORS-enabled, like every other tile source here, and fetched only in the 3D
+// view. Two sources over the same tiles because MapLibre warns when terrain and hillshade share one
+// — each keeps its own tile cache at its own resolution.
+//
+// Zoom 12 is the ceiling on purpose. The data underneath is SRTM at about 30 m, which zoom 12
+// already resolves; asking for 13–15 fetches four to sixteen times the tiles for interpolated
+// detail, and MapLibre overzooms past the source's maxzoom without complaint.
+const TERRARIUM = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'
+export const TERRAIN_ATTRIBUTION =
+  'Terrain: <a href="https://registry.opendata.aws/terrain-tiles/" target="_blank" rel="noopener">Mapzen Terrain Tiles on AWS</a> (SRTM, GMTED, ETOPO1)'
+
+export type Base3d = 'satellite' | 'map'
+
+/**
+ * Imagery with the map's roads and names over it. On the terrain the imagery *is* the landscape —
+ * fields, river channels, towns — and the roads and labels are what make it navigable. Liberty's
+ * fills (land use, water, buildings) are left out so they do not paint over the picture.
+ */
+async function hybridStyle(theme: Theme): Promise<StyleSpecification> {
+  const src = await libertyStyle()
+  const keep = src.layers.filter((l) => {
+    const sl = (l as { 'source-layer'?: string })['source-layer']
+    if (l.type === 'symbol') return true
+    return l.type === 'line' && (sl === 'transportation' || sl === 'boundary')
+  })
+  const style = cloudlessStyle(theme)
+  return {
+    ...style,
+    sources: { ...style.sources, ...src.sources },
+    layers: [
+      ...style.layers,
+      ...keep.map((l) =>
+        l.type === 'line'
+          ? ({ ...l, paint: { ...(l as { paint?: object }).paint, 'line-opacity': 0.7 } } as typeof l)
+          : l,
+      ),
+    ],
+  } as StyleSpecification
+}
+
+/** A complete 3D style: base, terrain, relief shading, sky and a light for the buildings. */
+export async function get3dStyle(base: Base3d, theme: Theme, exaggeration: number): Promise<StyleSpecification> {
+  const raw = base === 'satellite' ? await hybridStyle(theme) : structuredClone(await getBasemapStyle('osm', theme))
+  const style = structuredClone(raw) as StyleSpecification
+  const dem = { type: 'raster-dem', tiles: [TERRARIUM], encoding: 'terrarium', tileSize: 256, maxzoom: 12, attribution: TERRAIN_ATTRIBUTION }
+  style.sources = { ...style.sources, 'dem-terrain': dem, 'dem-shade': { ...dem } } as StyleSpecification['sources']
+  // Relief shading under the labels and roads, faint over imagery (which has its own shadows) and
+  // stronger over the flat-coloured map, where it is the only sign of the hills.
+  const firstLine = style.layers.findIndex((l) => l.type === 'symbol' || (l.type === 'line' && (l as { 'source-layer'?: string })['source-layer'] === 'transportation'))
+  const shade = {
+    id: 'hillshade',
+    type: 'hillshade',
+    source: 'dem-shade',
+    paint: {
+      'hillshade-exaggeration': base === 'satellite' ? 0.25 : 0.5,
+      'hillshade-shadow-color': theme === 'dark' ? '#000000' : '#473b24',
+      'hillshade-highlight-color': theme === 'dark' ? '#2b3440' : '#ffffff',
+      'hillshade-accent-color': theme === 'dark' ? '#000000' : '#5c4d33',
+    },
+  }
+  style.layers.splice(firstLine < 0 ? style.layers.length : firstLine, 0, shade as StyleSpecification['layers'][number])
+  ;(style as { terrain?: object }).terrain = { source: 'dem-terrain', exaggeration }
+  ;(style as { sky?: object }).sky =
+    theme === 'dark'
+      ? { 'sky-color': '#0b1422', 'horizon-color': '#1d2a3c', 'fog-color': '#101722', 'sky-horizon-blend': 0.6, 'horizon-fog-blend': 0.7, 'fog-ground-blend': 0.3, 'atmosphere-blend': 0.6 }
+      : { 'sky-color': '#7fb2e5', 'horizon-color': '#dce9f4', 'fog-color': '#e6edf3', 'sky-horizon-blend': 0.55, 'horizon-fog-blend': 0.65, 'fog-ground-blend': 0.25, 'atmosphere-blend': 0.8 }
+  ;(style as { light?: object }).light = { anchor: 'viewport', color: '#ffffff', intensity: 0.32, position: [1.3, 215, 35] }
+  return style
+}

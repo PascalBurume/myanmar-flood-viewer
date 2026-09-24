@@ -42,6 +42,9 @@ import {
 } from './cyclones'
 import { formatMMT as formatTime } from './time'
 import { seriesAt, seriesPopupHtml } from './fieldSample'
+import { Flood3D, DEFAULT_LOOK, type Look3d } from './components/Flood3D'
+import { useSceneIndex } from './scenes'
+import { viewFromUrl, type ViewKey } from './view'
 import { frameSource } from './fieldRender'
 import { useExposure } from './components/TopAffected'
 import { useHistory } from './components/Trend'
@@ -106,10 +109,12 @@ export function App({ initialIndex }: { initialIndex: DataIndex }) {
    * Which reading of the map is on show. MapLibre owns the URL hash (it writes the camera there on
    * every move), so the view goes in the query string, which it never touches.
    */
-  const [view, setView] = useState<'floods' | 'weather'>(() =>
-    new URLSearchParams(window.location.search).get('view') === 'weather' ? 'weather' : 'floods',
-  )
-  const [fieldOn, setFieldOn] = useState(() => new URLSearchParams(window.location.search).get('view') === 'weather')
+  const [view, setView] = useState<ViewKey>(viewFromUrl)
+  const [fieldOn, setFieldOn] = useState(() => viewFromUrl() === 'weather')
+  /** The 3D view: which scene (null is the whole country) and how it is drawn. */
+  const [sceneId, setSceneId] = useState<string | null>(null)
+  const [look3d, setLook3d] = useState<Look3d>(DEFAULT_LOOK)
+  const onLook3d = useCallback((patch: Partial<Look3d>) => setLook3d((l) => ({ ...l, ...patch })), [])
   const [fieldModel, setFieldModel] = useState<FieldState['model']>('ecmwf')
   const [fieldLayer, setFieldLayer] = useState<FieldState['layer']>('precip')
   const [fieldRun, setFieldRun] = useState<string | null>(null)
@@ -168,7 +173,7 @@ export function App({ initialIndex }: { initialIndex: DataIndex }) {
   // has to survive untouched.
   useEffect(() => {
     const url = new URL(window.location.href)
-    if (view === 'weather') url.searchParams.set('view', 'weather')
+    if (view !== 'floods') url.searchParams.set('view', view)
     else url.searchParams.delete('view')
     window.history.replaceState(null, '', `${url.pathname}${url.search}${window.location.hash}`)
   }, [view])
@@ -217,6 +222,7 @@ export function App({ initialIndex }: { initialIndex: DataIndex }) {
   const weather = useWeather(BASE_URL, dataVersion)
   const cyclones = useCyclones(BASE_URL, dataVersion)
   const fieldManifest = useForecastField(BASE_URL, dataVersion)
+  const sceneIndex = useSceneIndex(BASE_URL, view === '3d')
   const cyclonesState = useMemo(() => ({ doc: cyclones, show: cycloneShow }), [cyclones, cycloneShow])
   const observedTo = useMemo(() => observedUntil(cyclones), [cyclones])
   const fieldBase = useMemo(
@@ -249,7 +255,7 @@ export function App({ initialIndex }: { initialIndex: DataIndex }) {
    * view with the field off it used to appear anyway, carrying nothing but the fixes of a storm
    * that may be a thousand kilometres off-screen.
    */
-  const timelineOn = view === 'weather' || fieldOn
+  const timelineOn = view !== '3d' && (view === 'weather' || fieldOn)
   /**
    * The moment on show. `validTime` is null until the reader moves the scrubber, and the opening
    * moment used to be resolved twice: the timeline showed its first frame (a storm fix, badged
@@ -528,7 +534,7 @@ const zoomTo = useCallback(
    * it keeps the field as the reader set it, since a forecast can be read over the floods too.
    */
   const selectView = useCallback(
-    (v: 'floods' | 'weather', frame = true) => {
+    (v: ViewKey, frame = true) => {
       setView(v)
       if (v !== 'weather') return
       setFieldOn(true)
@@ -745,6 +751,21 @@ const zoomTo = useCallback(
     <>
       <div id="map" ref={mapContainer} />
 
+      {/* A second map, mounted only while the 3D view is open, over the flat one. Unmounting it
+          releases its WebGL context; the 2D map underneath keeps its state untouched. */}
+      {view === '3d' ? (
+        <Flood3D
+          theme={theme}
+          index={index}
+          places={places}
+          scenes={sceneIndex}
+          sceneId={sceneId}
+          onScene={setSceneId}
+          look={look3d}
+          onLook={onLook3d}
+        />
+      ) : null}
+
       <Panel
         index={index}
         theme={theme}
@@ -766,6 +787,7 @@ const zoomTo = useCallback(
         onRain={setRain}
         view={view}
         onView={selectView}
+        threeD={{ scenes: sceneIndex, sceneId, onScene: setSceneId, look: look3d, onLook: onLook3d }}
         field={field}
         onField={onField}
         weathernextReason={weathernextReason}
@@ -816,7 +838,7 @@ const zoomTo = useCallback(
         }
       />
 
-      {showImageryDate ? (
+      {showImageryDate && view !== '3d' ? (
         <div className="imagery-date" role="group" aria-label="Imagery date">
           <button
             type="button"
@@ -852,7 +874,7 @@ const zoomTo = useCallback(
           </button>
         </div>
       ) : null}
-      {showImageryDate && clearSearch ? <div className="imagery-note">{clearSearch}</div> : null}
+      {showImageryDate && clearSearch && view !== '3d' ? <div className="imagery-note">{clearSearch}</div> : null}
 
       <Timeline
         frames={timelineOn ? frames : []}
@@ -870,9 +892,9 @@ const zoomTo = useCallback(
         preload={framePreload}
       />
 
-      <MapLegend field={field} step={shownStep} view={view} onField={onField} />
+      {view !== '3d' ? <MapLegend field={field} step={shownStep} view={view} onField={onField} /> : null}
 
-      <div id="basemap" className="basemap-switch" role="tablist" aria-label="Basemap">
+      <div id="basemap" className="basemap-switch" role="tablist" aria-label="Basemap" hidden={view === '3d'}>
         {(Object.keys(BASEMAP_LABELS) as Basemap[]).map((key) => (
           <button
             key={key}

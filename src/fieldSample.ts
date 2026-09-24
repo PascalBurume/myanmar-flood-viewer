@@ -12,6 +12,7 @@
  */
 
 import { formatMMT } from './time'
+import { fetchPng } from './png'
 import { frameUrl, type FieldLayer, type FieldModel, type FieldRun, type LegendStops } from './forecastField'
 
 export const merc = (lat: number) => Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360))
@@ -31,7 +32,13 @@ export function pixelAt(lon: number, lat: number, bbox: number[], size: number[]
   return [x, y]
 }
 
-/** A frame's legend classes, one byte per pixel, read from the PNG itself. */
+/**
+ * A frame's legend classes, one byte per pixel, read from the PNG itself.
+ *
+ * Reading colours back through a canvas and matching them to the key worked only while the key's
+ * colours were the ones baked into the file; a palette change would have misread every frame
+ * already on disk. The index is the class by construction, whatever colour it was painted.
+ */
 export interface FrameClasses {
   width: number
   height: number
@@ -40,64 +47,11 @@ export interface FrameClasses {
   idx: Uint8Array
 }
 
-/**
- * Decode a paletted PNG to its palette indices.
- *
- * Reading colours back through a canvas and matching them to the key worked only while the key's
- * colours were the ones baked into the file; a palette change would have misread every frame
- * already on disk. The index is the class by construction, whatever colour it was painted, so this
- * reads the index. Standard PNG unfiltering (all five filter types, one byte per pixel) and the
- * browser's own zlib inflate; only the colour type the pipeline writes is accepted.
- */
+/** A frame's palette indices, read from the file itself (see `png.ts` for why not a canvas). */
 async function decodeIndices(url: string): Promise<FrameClasses | null> {
-  const res = await fetch(url)
-  if (!res.ok) return null
-  const buf = new Uint8Array(await res.arrayBuffer())
-  const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength)
-  let pos = 8
-  let width = 0
-  let height = 0
-  const idat: Uint8Array<ArrayBuffer>[] = []
-  while (pos + 8 <= buf.length) {
-    const len = view.getUint32(pos)
-    const kind = String.fromCharCode(...buf.subarray(pos + 4, pos + 8))
-    const body = buf.subarray(pos + 8, pos + 8 + len)
-    if (kind === 'IHDR') {
-      width = view.getUint32(pos + 8)
-      height = view.getUint32(pos + 12)
-      if (body[8] !== 8 || body[9] !== 3) return null // 8-bit indexed only
-    } else if (kind === 'IDAT') idat.push(body.slice())
-    else if (kind === 'IEND') break
-    pos += 12 + len
-  }
-  if (!width || !height || !idat.length) return null
-  const raw = new Uint8Array(await new Response(new Blob(idat).stream().pipeThrough(new DecompressionStream('deflate'))).arrayBuffer())
-  const idx = new Uint8Array(width * height)
-  let prev = new Uint8Array(width)
-  for (let y = 0; y < height; y++) {
-    const f = raw[y * (width + 1)]
-    const line = raw.subarray(y * (width + 1) + 1, (y + 1) * (width + 1))
-    const cur = new Uint8Array(width)
-    for (let x = 0; x < width; x++) {
-      const a = x ? cur[x - 1] : 0
-      const b = prev[x]
-      const c = x ? prev[x - 1] : 0
-      let p = 0
-      if (f === 1) p = a
-      else if (f === 2) p = b
-      else if (f === 3) p = (a + b) >> 1
-      else if (f === 4) {
-        const pa = Math.abs(b - c)
-        const pb = Math.abs(a - c)
-        const pc = Math.abs(a + b - 2 * c)
-        p = pa <= pb && pa <= pc ? a : pb <= pc ? b : c
-      }
-      cur[x] = (line[x] + p) & 0xff
-    }
-    idx.set(cur, y * width)
-    prev = cur
-  }
-  return { width, height, idx }
+  const png = await fetchPng(url)
+  if (!png || png.channels !== 1) return null
+  return { width: png.width, height: png.height, idx: png.data }
 }
 
 /** Decoded frames, by URL. Frames are a few hundred bytes and immutable, so they are kept. */

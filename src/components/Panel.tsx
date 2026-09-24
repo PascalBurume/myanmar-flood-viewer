@@ -1,5 +1,9 @@
 import { useRef, useState } from 'react'
 import { CountUp } from './CountUp'
+import { ThreeDControls } from './ThreeDControls'
+import type { Look3d } from './Flood3D'
+import type { SceneIndex } from '../scenes'
+import { VIEW_LABELS, type ViewKey } from '../view'
 
 import {
   EARLY_COLOR,
@@ -388,6 +392,7 @@ export function Panel({
   onZoomStorm,
   view,
   onView,
+  threeD,
   field,
   onField,
   weathernextReason,
@@ -423,8 +428,16 @@ export function Panel({
   onCycloneShow: (k: CycloneLayerKey, v: boolean) => void
   validTime: string | null
   onZoomStorm: (storm: Storm) => void
-  view: 'floods' | 'weather'
-  onView: (v: 'floods' | 'weather') => void
+  view: ViewKey
+  onView: (v: ViewKey) => void
+  /** The 3D view's pane: scenes and how they are drawn. */
+  threeD: {
+    scenes: SceneIndex | null
+    sceneId: string | null
+    onScene: (id: string | null) => void
+    look: Look3d
+    onLook: (patch: Partial<Look3d>) => void
+  }
   field: FieldState
   onField: (patch: Partial<FieldState>) => void
   weathernextReason: string | null
@@ -456,7 +469,7 @@ export function Panel({
         {/* One map, two readings of it: what the water has done, and what the weather is about to
             do. Kept in the header so it stays reachable when the panel is collapsed. */}
         <div className="view-switch seg" role="tablist" aria-label="View">
-          {(['floods', 'weather'] as const).map((v) => (
+          {(['floods', 'weather', '3d'] as const).map((v) => (
             <button
               key={v}
               type="button"
@@ -465,7 +478,7 @@ export function Panel({
               aria-selected={view === v}
               onClick={() => onView(v)}
             >
-              {v === 'floods' ? 'Floods' : 'Weather'}
+              {VIEW_LABELS[v]}
             </button>
           ))}
         </div>
@@ -515,7 +528,7 @@ export function Panel({
             aria-controls={`panel-${key}`}
             onClick={() => setTab(key)}
           >
-            {key === 'layers' ? (view === 'weather' ? 'Controls' : 'Layers') : 'Assistant'}
+            {key === 'layers' ? (view === 'floods' ? 'Layers' : view === '3d' ? 'Scenes' : 'Controls') : 'Assistant'}
           </button>
         ))}
       </div>
@@ -555,6 +568,11 @@ export function Panel({
           <Field label="Data &amp; updates">{pipelineSummary}</Field>
           <footer className="panel-foot is-inline">{footer}</footer>
         </div>
+
+      <div className="panel-body" id="panel-3d" role="tabpanel" aria-labelledby="tab-layers" hidden={view !== '3d' || tab !== 'layers'}>
+        <ThreeDControls {...threeD} />
+        <footer className="panel-foot is-inline">{footer}</footer>
+      </div>
 
       <div className="panel-body" id="panel-layers" role="tabpanel" aria-labelledby="tab-layers" hidden={view !== 'floods' || tab !== 'layers'}>
         <p className="notice">

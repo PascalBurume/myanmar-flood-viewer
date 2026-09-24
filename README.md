@@ -509,6 +509,46 @@ Weather Lab's other model, **MetNet Global**, has no programmatic access at all 
 Ensemble cyclone tracks and a measured spread "cone" (the disabled toggles on the cyclones card) come
 from the same members, once the reducer exists.
 
+### The 3D view
+
+A third reading of the map (`?view=3d`): Myanmar on SRTM terrain, tilted, with a sky. It is a
+separate map, mounted only while the view is open.
+
+**The country.** Every township UNOSAT's FloodAI counted is a column as tall as the people exposed
+there — linear, so twice the height is twice the people — and the hand-traced extents are draped on
+the ground where they exist. Pins mark the flood scenes.
+
+**The scenes.** `scripts/build_scenes.py` finds, in each traced region, the ~14 km windows holding
+the most water and keeps the two where it reached the most buildings. Pick one and the camera flies
+in, the flood plays, and at the date the water reached the most houses the camera goes down to them.
+
+| On screen | Where it comes from |
+|---|---|
+| Water on each dated step | **Observed** — exactly the extent UNOSAT traced from that Sentinel-1 pass |
+| Water between the steps | **Simulated** — newly flooded ground fills deepest-first by a terrain estimate (FwDET-style, from SRTM), receding ground drains shallowest-first |
+| Buildings | Microsoft Global ML Building Footprints (ODbL), machine-detected; heights are drawn, not measured |
+| Orange buildings | Standing inside the water on that step — exposed, not necessarily damaged |
+| Terrain | Mapzen Terrain Tiles on AWS Open Data (SRTM), exaggerated for legibility |
+
+The simulation is an illustration of *order*, not a hydraulic model, and no depth is claimed
+anywhere: SRTM's vertical error in a flat floodplain is several metres. The bar under the map says
+**Observed** or **Simulated** at every moment, and the counts it shows at an observed step are the
+scene's own figures to the pixel. Radar misses water between buildings, so a count of buildings in
+the water is a floor.
+
+Bago and Yangon have two passes (25 and 31 August 2021), so their scenes show water rising and then
+draining; Mandalay and Nay Pyi Taw have one (24 September 2024, Typhoon Yagi).
+
+Rebuild the scenes after converting a new UNOSAT product:
+
+```sh
+python3 scripts/build_scenes.py            # downloads are cached under data/cache/
+```
+
+It fetches terrain tiles and footprint tiles once (tens of MB, gitignored) and writes about 6 MB
+under `public/data/scenes/`, which is committed. At runtime the 3D view fetches only map tiles —
+the imagery, the vector basemap, and the terrain.
+
 ### What is and is not automated
 
 **ADAM is polled** twice a day (~20 KB per check). Only the newest event's impact table is publicly
@@ -532,12 +572,14 @@ public/data/history.json    142 satellite passes since 2022 — the trend series
 public/data/weather.json    rainfall and river-discharge forecasts
 public/data/cyclones.json   tropical cyclones: observed (IBTrACS) and forecast (JTWC) tracks
 public/data/field/          the forecast field: a manifest, and PNG frames per model run
+public/data/scenes/         the 3D view's flood scenes: water timelines and building footprints
 public/data/MM_*/           converted GeoJSON per region
 src/                        the viewer
 scripts/common.py           shared helpers
 scripts/scan_adam.py        poll WFP ADAM, refresh the impact figures
 scripts/status.py           write status.json
 scripts/history.py          rebuild the multi-year series from every FloodAI archive
+scripts/build_scenes.py     build the 3D view's flood scenes (hand-run, like convert_unosat.py)
 scripts/alerts.py           derive surge / failed-check / new-data alerts
 scripts/scan_weather.py     rainfall + GloFAS river discharge (verified channel cells)
 scripts/scan_cyclones.py    cyclone tracks from IBTrACS ACTIVE and JTWC warnings (+ test_cyclones.py)

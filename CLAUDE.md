@@ -420,6 +420,64 @@ the map controls, basemap switch and imagery pill follow from it. On a phone the
 with each pane (`.panel-foot.is-inline`) instead of taking half of the 62vh sheet, and the basemap
 switch hides while the sheet is open, where it used to sit on top of the sheet.
 
+## The 3D view
+
+`?view=3d` — `src/components/Flood3D.tsx` (the map and its overlays), `ThreeDControls.tsx` (the
+pane), `src/scenes.ts` (loading and painting), `scripts/build_scenes.py` (the data). Built at the
+owner's request for "a 3D map where you can zoom in and see a town and how the water came".
+
+**A second map, not a mode of the first.** A tilted terrain map with a sky is a different
+instrument, and folding it into `useMapOverlays` would have threaded terrain, extrusions and a
+canvas source through every path that file already has. It mounts only while the view is open, so
+leaving releases its WebGL context; the 2D map underneath keeps its state untouched.
+
+**What is observed and what is simulated is the whole design.** The traced extents are the only
+facts: Bago and Yangon have two passes, Mandalay and Nay Pyi Taw one. A scene's `water.png` holds
+per pixel *when* the ground goes under (R) and drains (G) on a timeline where observation k sits at
+T = k, and both round up — which is what makes every observed step **exactly** the traced extent.
+Between steps the order is modelled: FwDET-style depth (nearest-shore ground as the water surface,
+smoothed, minus the ground) blended with distance from the shore. The depth is never shown, only
+used to order the fill, because SRTM's vertical error in a flat floodplain is several metres.
+`test_scenes.py` pins the keyframe property; do not loosen it.
+
+**Buildings are Microsoft's footprints, because OpenStreetMap's are not there.** Decoding
+OpenFreeMap's own tiles found 35 buildings in a 7 km block of central Mandalay and 10 in Bago — the
+basemap's `building-3d` layer would have drawn empty towns. Microsoft's ML footprints (ODbL) carry
+8,467 in one 15 km window east of Bago. They have no heights in Myanmar, so heights are nominal by
+footprint area and the legend says so. The basemap's own building layers are hidden in 3D so the
+two never double up.
+
+**Scene choice favours houses over water.** The four wettest windows per region are scored by how
+many buildings the water reached on any date, and two are kept. Radar misses water between
+buildings, so every count is a floor — said in the pane.
+
+Traps recorded:
+
+- **`isStyleLoaded()` is not "can I add a layer".** It also waits for every tile, and with terrain
+  loading during a camera flight it stayed false for seconds: the scene's layers were never added
+  and the country's stayed on screen. `styleOk` is set on `style.load` and cleared on `setStyle`.
+- **MapLibre's control corners have `z-index: 2`.** Without a stacking context on `#map` they sat in
+  the page's context, above the 3D view — a second set of zoom buttons and a geolocate button over
+  its map. `#map { z-index: 0 }`.
+- **A paused canvas source never re-uploads.** `draw()` plays it for one frame and pauses again on
+  `render` whenever the simulation is not running.
+- **Feature-state does not survive `setStyle`**, so every theme or base switch re-pushes each
+  building's wet flag (`wetState` is reset in `addLayers`).
+- **Leaving a scene must clear `dataRef` before `addLayers`.** State reaches the ref only on the
+  next render; `addLayers` would still see the scene and hide the country again.
+- **The townships arrive after the map is built**, so the columns source is refreshed by an effect,
+  not only when created — the first build drew no columns at all.
+- **The camera moves on its own only until the reader touches it** (`touched`, set on mousedown,
+  touchstart and wheel). The glide to the houses happens once, at the observation with the most
+  buildings in the water — for Bago the first pass, so the reader then watches it drain.
+- **Background tabs pause `requestAnimationFrame`**, and with it every MapLibre animation. A test
+  that selects a scene in a hidden tab sees the camera never leave the country.
+- **Terrain maxzoom is 12**, SRTM's own resolution; deeper zooms fetch four to sixteen times the
+  tiles for interpolated detail.
+
+The page now also contacts the Terrarium terrain tiles — map tiles, public and keyless like the
+others — and only in this view. Footprints are never fetched at runtime; they are committed.
+
 ## Monitoring
 
 Three layers, added together, each answering a question the others cannot.
@@ -795,6 +853,8 @@ not a pipeline. Python's `zipfile` stands in for `unzip`.
 - [x] add tropical cyclone tracks (IBTrACS + JTWC, public) with a timeline scrubber — Weather Lab, phase 1
 - [x] add the Weather view: Open-Meteo forecast field (ECMWF / GFS / ICON + 51-member ensemble), model radio, init stepper, map legend
 - [x] audit and repair the Weather view: step timing, one shared moment, opening on now, intensity strip, point forecast, legible wind, mobile layout, motion
+- [x] smooth Weather Lab-style rain rendering with density and show/hide
+- [x] add the 3D view: terrain, people-exposed columns, and flood scenes with building footprints and an observed-anchored fill simulation
 - [ ] WeatherNext 3 gridded field + ensemble cyclone tracks once Google allow-list access arrives (phases 2–3)
 - [ ] decide whether to extend or stop the scan when `SCAN_UNTIL` (2026-09-14) is reached
 - [ ] add drawing code if a new layer kind arrives (anything outside `LAYER_KINDS`:
