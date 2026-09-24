@@ -1,0 +1,393 @@
+{
+ "generatedAt": "2026-09-24T17:55:07+00:00",
+ "note": "Where water was is observed: at each dated step the water is exactly the extent UNOSAT traced from that satellite pass. Between steps it is simulated — newly flooded ground fills deepest-first by an estimate from SRTM terrain, receding ground dries shallowest-first. No depth is claimed: the estimate only orders the fill. Buildings are machine-detected footprints; one inside the water was exposed, not necessarily damaged.",
+ "sources": {
+  "extents": "UNOSAT via HDX (CC BY-SA)",
+  "terrain": "Terrarium tiles, Mapzen / AWS Open Data — SRTM (zoom 12)",
+  "buildings": "Microsoft Global ML Building Footprints (ODbL)"
+ },
+ "rasterZoom": 13,
+ "scenes": [
+  {
+   "id": "bago-south-east-of-thanatpin",
+   "name": "south-east of Thanatpin",
+   "region": "Bago Region",
+   "dataset": "MM_Bago",
+   "event": "Monsoon floods, August 2021",
+   "product": "FL20210831MMR",
+   "center": [
+    96.83431,
+    17.15735
+   ],
+   "bbox": [
+    96.769295,
+    17.092393,
+    96.899242,
+    17.222299
+   ],
+   "size": [
+    757,
+    792
+   ],
+   "pixelMetres": 18.3,
+   "pixelKm2": 0.00033338600749040643,
+   "steps": 2,
+   "observations": [
+    {
+     "t": 1,
+     "date": "2021-08-25",
+     "sensor": "Sentinel-1",
+     "layer": "floodextentearly",
+     "waterKm2": 36.2,
+     "buildingsInWater": 452
+    },
+    {
+     "t": 2,
+     "date": "2021-08-31",
+     "sensor": "Sentinel-1",
+     "layer": "floodextent",
+     "waterKm2": 5.3,
+     "buildingsInWater": 7
+    }
+   ],
+   "buildings": {
+    "count": 3847,
+    "truncated": false
+   },
+   "focus": [
+    96.83254,
+    17.12623
+   ],
+   "water": "scenes/bago-south-east-of-thanatpin/water.png",
+   "buildingsFile": "scenes/bago-south-east-of-thanatpin/buildings.json",
+   "township": {
+    "lon": 96.72064,
+    "lat": 17.25457,
+    "township": "Thanatpin",
+    "region": "Bago (East)"
+   }
+  },
+  {
+   "id": "naypyitaw-south-east-of-poke-ba-thi-ri",
+   "name": "south-east of Poke Ba Thi Ri",
+   "region": "Nay Pyi Taw Union Territory",
+   "dataset": "MM_NayPyiTaw",
+   "event": "Typhoon Yagi, September 2024",
+   "product": "FL20240912MMR",
+   "center": [
+    96.24177,
+    19.82287
+   ],
+   "bbox": [
+    96.17672,
+    19.757818,
+    96.306839,
+    19.887817
+   ],
+   "size": [
+    758,
+    805
+   ],
+   "pixelMetres": 18.0,
+   "pixelKm2": 0.00032317063423717874,
+   "steps": 1,
+   "observations": [
+    {
+     "t": 1,
+     "date": "2024-09-24",
+     "sensor": "Sentinel-1",
+     "layer": "floodextent",
+     "waterKm2": 51.5,
+     "buildingsInWater": 169
+    }
+   ],
+   "buildings": {
+    "count": 34678,
+    "truncated": false
+   },
+   "focus": [
+    96.23131,
+    19.88512
+   ],
+   "water": "scenes/naypyitaw-south-east-of-poke-ba-thi-ri/water.png",
+   "buildingsFile": "scenes/naypyitaw-south-east-of-poke-ba-thi-ri/buildings.json",
+   "township": {
+    "lon": 96.19116,
+    "lat": 19.89504,
+    "township": "Poke Ba Thi Ri",
+    "region": "Nay Pyi Taw"
+   }
+  },
+  {
+   "id": "naypyitaw-north-east-of-lewe",
+   "name": "north-east of Lewe",
+   "region": "Nay Pyi Taw Union Territory",
+   "dataset": "MM_NayPyiTaw",
+   "event": "Typhoon Yagi, September 2024",
+   "product": "FL20240912MMR",
+   "center": [
+    96.25177,
+    19.59287
+   ],
+   "bbox": [
+    96.186848,
+    19.527921,
+    96.316795,
+    19.657946
+   ],
+   "size": [
+    757,
+    804
+   ],
+   "pixelMetres": 18.0,
+   "pixelKm2": 0.0003241013696229084,
+   "steps": 1,
+   "observations": [
+    {
+     "t": 1,
+     "date": "2024-09-24",
+     "sensor": "Sentinel-1",
+     "layer": "floodextent",
+     "waterKm2": 49.0,
+     "buildingsInWater": 115
+    }
+   ],
+   "buildings": {
+    "count": 20469,
+    "truncated": false
+   },
+   "focus": [
+    96.28213,
+    19.61876
+   ],
+   "water": "scenes/naypyitaw-north-east-of-lewe/water.png",
+   "buildingsFile": "scenes/naypyitaw-north-east-of-lewe/buildings.json",
+   "township": {
+    "lon": 96.10028,
+    "lat": 19.53029,
+    "township": "Lewe",
+    "region": "Nay Pyi Taw"
+   }
+  },
+  {
+   "id": "bago-north-of-thanatpin",
+   "name": "north of Thanatpin",
+   "region": "Bago Region",
+   "dataset": "MM_Bago",
+   "event": "Monsoon floods, August 2021",
+   "product": "FL20210831MMR",
+   "center": [
+    96.71431,
+    17.29735
+   ],
+   "bbox": [
+    96.649303,
+    17.2323,
+    96.779251,
+    17.362271
+   ],
+   "size": [
+    757,
+    793
+   ],
+   "pixelMetres": 18.2,
+   "pixelKm2": 0.0003328812060601461,
+   "steps": 2,
+   "observations": [
+    {
+     "t": 1,
+     "date": "2021-08-25",
+     "sensor": "Sentinel-1",
+     "layer": "floodextentearly",
+     "waterKm2": 17.8,
+     "buildingsInWater": 86
+    },
+    {
+     "t": 2,
+     "date": "2021-08-31",
+     "sensor": "Sentinel-1",
+     "layer": "floodextent",
+     "waterKm2": 11.1,
+     "buildingsInWater": 31
+    }
+   ],
+   "buildings": {
+    "count": 7330,
+    "truncated": false
+   },
+   "focus": [
+    96.66326,
+    17.32504
+   ],
+   "water": "scenes/bago-north-of-thanatpin/water.png",
+   "buildingsFile": "scenes/bago-north-of-thanatpin/buildings.json",
+   "township": {
+    "lon": 96.72064,
+    "lat": 17.25457,
+    "township": "Thanatpin",
+    "region": "Bago (East)"
+   }
+  },
+  {
+   "id": "mandalay-south-west-of-sintgaing",
+   "name": "south-west of Sintgaing",
+   "region": "Mandalay Region",
+   "dataset": "MM_Mandalay",
+   "event": "Typhoon Yagi, September 2024",
+   "product": "FL20240912MMR",
+   "center": [
+    96.06127,
+    21.69583
+   ],
+   "bbox": [
+    95.996304,
+    21.630782,
+    96.126251,
+    21.760775
+   ],
+   "size": [
+    757,
+    815
+   ],
+   "pixelMetres": 17.8,
+   "pixelKm2": 0.00031525946169032657,
+   "steps": 1,
+   "observations": [
+    {
+     "t": 1,
+     "date": "2024-09-24",
+     "sensor": "Sentinel-1",
+     "layer": "floodextent",
+     "waterKm2": 43.1,
+     "buildingsInWater": 43
+    }
+   ],
+   "buildings": {
+    "count": 20270,
+    "truncated": false
+   },
+   "focus": [
+    96.07289,
+    21.71551
+   ],
+   "water": "scenes/mandalay-south-west-of-sintgaing/water.png",
+   "buildingsFile": "scenes/mandalay-south-west-of-sintgaing/buildings.json",
+   "township": {
+    "lon": 96.11959,
+    "lat": 21.73418,
+    "township": "Sintgaing",
+    "region": "Mandalay"
+   }
+  },
+  {
+   "id": "mandalay-south-west-of-myittha",
+   "name": "south-west of Myittha",
+   "region": "Mandalay Region",
+   "dataset": "MM_Mandalay",
+   "event": "Typhoon Yagi, September 2024",
+   "product": "FL20240912MMR",
+   "center": [
+    96.09127,
+    21.31583
+   ],
+   "bbox": [
+    96.026344,
+    21.250822,
+    96.156292,
+    21.380836
+   ],
+   "size": [
+    757,
+    813
+   ],
+   "pixelMetres": 17.8,
+   "pixelKm2": 0.0003169115127825812,
+   "steps": 1,
+   "observations": [
+    {
+     "t": 1,
+     "date": "2024-09-24",
+     "sensor": "Sentinel-1",
+     "layer": "floodextent",
+     "waterKm2": 63.8,
+     "buildingsInWater": 38
+    }
+   ],
+   "buildings": {
+    "count": 11704,
+    "truncated": false
+   },
+   "focus": [
+    96.10862,
+    21.33684
+   ],
+   "water": "scenes/mandalay-south-west-of-myittha/water.png",
+   "buildingsFile": "scenes/mandalay-south-west-of-myittha/buildings.json",
+   "township": {
+    "lon": 96.16504,
+    "lat": 21.35239,
+    "township": "Myittha",
+    "region": "Mandalay"
+   }
+  },
+  {
+   "id": "yangon-south-east-of-kayan",
+   "name": "south-east of Kayan",
+   "region": "Yangon Region",
+   "dataset": "MM_Yangon",
+   "event": "Monsoon floods, August 2021",
+   "product": "FL20210831MMR",
+   "center": [
+    96.75182,
+    16.82614
+   ],
+   "bbox": [
+    96.686897,
+    16.761153,
+    96.816845,
+    16.891124
+   ],
+   "size": [
+    757,
+    791
+   ],
+   "pixelMetres": 18.3,
+   "pixelKm2": 0.0003345658989451453,
+   "steps": 2,
+   "observations": [
+    {
+     "t": 1,
+     "date": "2021-08-25",
+     "sensor": "Sentinel-1",
+     "layer": "floodextentearly",
+     "waterKm2": 11.7,
+     "buildingsInWater": 6
+    },
+    {
+     "t": 2,
+     "date": "2021-08-31",
+     "sensor": "Sentinel-1",
+     "layer": "floodextent",
+     "waterKm2": 0.6,
+     "buildingsInWater": 0
+    }
+   ],
+   "buildings": {
+    "count": 3006,
+    "truncated": false
+   },
+   "focus": [
+    96.76261,
+    16.79286
+   ],
+   "water": "scenes/yangon-south-east-of-kayan/water.png",
+   "buildingsFile": "scenes/yangon-south-east-of-kayan/buildings.json",
+   "township": {
+    "lon": 96.60703,
+    "lat": 16.91098,
+    "township": "Kayan",
+    "region": "Yangon"
+   }
+  }
+ ]
+}

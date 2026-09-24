@@ -20,3 +20,7 @@ public/data/wn3/
 # The Open-Meteo forecast field: rebuilt every run, a few MB of PNG frames per run, kept 8 runs
 # deep for the timeline's init stepper. Served by --publish, not committed.
 public/data/field/
+
+# Terrain tiles and building footprints downloaded by scripts/build_scenes.py. Tens of MB, and
+# re-fetchable; the scenes built from them are committed.
+data/cache/
