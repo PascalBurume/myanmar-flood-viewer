@@ -9,6 +9,14 @@
         "dev"
       ],
       "port": 5175
+    },
+    {
+      "name": "flood-server",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "server/index.mjs"
+      ],
+      "port": 5180
     }
   ]
 }
