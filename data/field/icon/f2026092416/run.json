@@ -1,0 +1,266 @@
+{
+ "key": "f2026092416",
+ "model": "icon",
+ "init": null,
+ "fetchedAt": "2026-09-24T16:40:58+00:00",
+ "source": "icon_seamless",
+ "steps": [
+  {
+   "h": 3,
+   "valid": "2026-09-24T15:00:00Z",
+   "precip": "icon/f2026092416/precip3h_003.png"
+  },
+  {
+   "h": 6,
+   "valid": "2026-09-24T18:00:00Z",
+   "precip": "icon/f2026092416/precip3h_006.png"
+  },
+  {
+   "h": 9,
+   "valid": "2026-09-24T21:00:00Z",
+   "precip": "icon/f2026092416/precip3h_009.png"
+  },
+  {
+   "h": 12,
+   "valid": "2026-09-25T00:00:00Z",
+   "precip": "icon/f2026092416/precip3h_012.png"
+  },
+  {
+   "h": 15,
+   "valid": "2026-09-25T03:00:00Z",
+   "precip": "icon/f2026092416/precip3h_015.png"
+  },
+  {
+   "h": 18,
+   "valid": "2026-09-25T06:00:00Z",
+   "precip": "icon/f2026092416/precip3h_018.png"
+  },
+  {
+   "h": 21,
+   "valid": "2026-09-25T09:00:00Z",
+   "precip": "icon/f2026092416/precip3h_021.png"
+  },
+  {
+   "h": 24,
+   "valid": "2026-09-25T12:00:00Z",
+   "precip": "icon/f2026092416/precip3h_024.png"
+  },
+  {
+   "h": 27,
+   "valid": "2026-09-25T15:00:00Z",
+   "precip": "icon/f2026092416/precip3h_027.png"
+  },
+  {
+   "h": 30,
+   "valid": "2026-09-25T18:00:00Z",
+   "precip": "icon/f2026092416/precip3h_030.png"
+  },
+  {
+   "h": 33,
+   "valid": "2026-09-25T21:00:00Z",
+   "precip": "icon/f2026092416/precip3h_033.png"
+  },
+  {
+   "h": 36,
+   "valid": "2026-09-26T00:00:00Z",
+   "precip": "icon/f2026092416/precip3h_036.png"
+  },
+  {
+   "h": 39,
+   "valid": "2026-09-26T03:00:00Z",
+   "precip": "icon/f2026092416/precip3h_039.png"
+  },
+  {
+   "h": 42,
+   "valid": "2026-09-26T06:00:00Z",
+   "precip": "icon/f2026092416/precip3h_042.png"
+  },
+  {
+   "h": 45,
+   "valid": "2026-09-26T09:00:00Z",
+   "precip": "icon/f2026092416/precip3h_045.png"
+  },
+  {
+   "h": 48,
+   "valid": "2026-09-26T12:00:00Z",
+   "precip": "icon/f2026092416/precip3h_048.png"
+  },
+  {
+   "h": 51,
+   "valid": "2026-09-26T15:00:00Z",
+   "precip": "icon/f2026092416/precip3h_051.png"
+  },
+  {
+   "h": 54,
+   "valid": "2026-09-26T18:00:00Z",
+   "precip": "icon/f2026092416/precip3h_054.png"
+  },
+  {
+   "h": 57,
+   "valid": "2026-09-26T21:00:00Z",
+   "precip": "icon/f2026092416/precip3h_057.png"
+  },
+  {
+   "h": 60,
+   "valid": "2026-09-27T00:00:00Z",
+   "precip": "icon/f2026092416/precip3h_060.png"
+  },
+  {
+   "h": 63,
+   "valid": "2026-09-27T03:00:00Z",
+   "precip": "icon/f2026092416/precip3h_063.png"
+  },
+  {
+   "h": 66,
+   "valid": "2026-09-27T06:00:00Z",
+   "precip": "icon/f2026092416/precip3h_066.png"
+  },
+  {
+   "h": 69,
+   "valid": "2026-09-27T09:00:00Z",
+   "precip": "icon/f2026092416/precip3h_069.png"
+  },
+  {
+   "h": 72,
+   "valid": "2026-09-27T12:00:00Z",
+   "precip": "icon/f2026092416/precip3h_072.png"
+  },
+  {
+   "h": 75,
+   "valid": "2026-09-27T15:00:00Z",
+   "precip": "icon/f2026092416/precip3h_075.png"
+  },
+  {
+   "h": 78,
+   "valid": "2026-09-27T18:00:00Z",
+   "precip": "icon/f2026092416/precip3h_078.png"
+  },
+  {
+   "h": 81,
+   "valid": "2026-09-27T21:00:00Z",
+   "precip": "icon/f2026092416/precip3h_081.png"
+  },
+  {
+   "h": 84,
+   "valid": "2026-09-28T00:00:00Z",
+   "precip": "icon/f2026092416/precip3h_084.png"
+  },
+  {
+   "h": 87,
+   "valid": "2026-09-28T03:00:00Z",
+   "precip": "icon/f2026092416/precip3h_087.png"
+  },
+  {
+   "h": 90,
+   "valid": "2026-09-28T06:00:00Z",
+   "precip": "icon/f2026092416/precip3h_090.png"
+  },
+  {
+   "h": 93,
+   "valid": "2026-09-28T09:00:00Z",
+   "precip": "icon/f2026092416/precip3h_093.png"
+  },
+  {
+   "h": 96,
+   "valid": "2026-09-28T12:00:00Z",
+   "precip": "icon/f2026092416/precip3h_096.png"
+  },
+  {
+   "h": 99,
+   "valid": "2026-09-28T15:00:00Z",
+   "precip": "icon/f2026092416/precip3h_099.png"
+  },
+  {
+   "h": 102,
+   "valid": "2026-09-28T18:00:00Z",
+   "precip": "icon/f2026092416/precip3h_102.png"
+  },
+  {
+   "h": 105,
+   "valid": "2026-09-28T21:00:00Z",
+   "precip": "icon/f2026092416/precip3h_105.png"
+  },
+  {
+   "h": 108,
+   "valid": "2026-09-29T00:00:00Z",
+   "precip": "icon/f2026092416/precip3h_108.png"
+  },
+  {
+   "h": 111,
+   "valid": "2026-09-29T03:00:00Z",
+   "precip": "icon/f2026092416/precip3h_111.png"
+  },
+  {
+   "h": 114,
+   "valid": "2026-09-29T06:00:00Z",
+   "precip": "icon/f2026092416/precip3h_114.png"
+  },
+  {
+   "h": 117,
+   "valid": "2026-09-29T09:00:00Z",
+   "precip": "icon/f2026092416/precip3h_117.png"
+  },
+  {
+   "h": 120,
+   "valid": "2026-09-29T12:00:00Z",
+   "precip": "icon/f2026092416/precip3h_120.png"
+  },
+  {
+   "h": 123,
+   "valid": "2026-09-29T15:00:00Z",
+   "precip": "icon/f2026092416/precip3h_123.png"
+  },
+  {
+   "h": 126,
+   "valid": "2026-09-29T18:00:00Z",
+   "precip": "icon/f2026092416/precip3h_126.png"
+  },
+  {
+   "h": 129,
+   "valid": "2026-09-29T21:00:00Z",
+   "precip": "icon/f2026092416/precip3h_129.png"
+  },
+  {
+   "h": 132,
+   "valid": "2026-09-30T00:00:00Z",
+   "precip": "icon/f2026092416/precip3h_132.png"
+  },
+  {
+   "h": 135,
+   "valid": "2026-09-30T03:00:00Z",
+   "precip": "icon/f2026092416/precip3h_135.png"
+  },
+  {
+   "h": 138,
+   "valid": "2026-09-30T06:00:00Z",
+   "precip": "icon/f2026092416/precip3h_138.png"
+  },
+  {
+   "h": 141,
+   "valid": "2026-09-30T09:00:00Z",
+   "precip": "icon/f2026092416/precip3h_141.png"
+  },
+  {
+   "h": 144,
+   "valid": "2026-09-30T12:00:00Z",
+   "precip": "icon/f2026092416/precip3h_144.png"
+  },
+  {
+   "h": 147,
+   "valid": "2026-09-30T15:00:00Z",
+   "precip": "icon/f2026092416/precip3h_147.png"
+  },
+  {
+   "h": 150,
+   "valid": "2026-09-30T18:00:00Z",
+   "precip": "icon/f2026092416/precip3h_150.png"
+  },
+  {
+   "h": 153,
+   "valid": "2026-09-30T21:00:00Z",
+   "precip": "icon/f2026092416/precip3h_153.png"
+  }
+ ],
+ "wind": "icon/f2026092416/wind.json",
+ "points": "icon/f2026092416/points.json"
+}

@@ -1,0 +1,277 @@
+{
+ "key": "2026092906",
+ "model": "ecmwf",
+ "init": "2026-09-29T06:00:00Z",
+ "fetchedAt": "2026-09-29T16:07:18+00:00",
+ "source": "ecmwf_ifs025",
+ "steps": [
+  {
+   "h": 3,
+   "valid": "2026-09-29T09:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_003.png"
+  },
+  {
+   "h": 6,
+   "valid": "2026-09-29T12:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_006.png"
+  },
+  {
+   "h": 9,
+   "valid": "2026-09-29T15:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_009.png"
+  },
+  {
+   "h": 12,
+   "valid": "2026-09-29T18:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_012.png"
+  },
+  {
+   "h": 15,
+   "valid": "2026-09-29T21:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_015.png"
+  },
+  {
+   "h": 18,
+   "valid": "2026-09-30T00:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_018.png"
+  },
+  {
+   "h": 21,
+   "valid": "2026-09-30T03:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_021.png"
+  },
+  {
+   "h": 24,
+   "valid": "2026-09-30T06:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_024.png"
+  },
+  {
+   "h": 27,
+   "valid": "2026-09-30T09:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_027.png"
+  },
+  {
+   "h": 30,
+   "valid": "2026-09-30T12:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_030.png"
+  },
+  {
+   "h": 33,
+   "valid": "2026-09-30T15:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_033.png"
+  },
+  {
+   "h": 36,
+   "valid": "2026-09-30T18:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_036.png"
+  },
+  {
+   "h": 39,
+   "valid": "2026-09-30T21:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_039.png"
+  },
+  {
+   "h": 42,
+   "valid": "2026-10-01T00:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_042.png"
+  },
+  {
+   "h": 45,
+   "valid": "2026-10-01T03:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_045.png"
+  },
+  {
+   "h": 48,
+   "valid": "2026-10-01T06:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_048.png"
+  },
+  {
+   "h": 51,
+   "valid": "2026-10-01T09:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_051.png"
+  },
+  {
+   "h": 54,
+   "valid": "2026-10-01T12:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_054.png"
+  },
+  {
+   "h": 57,
+   "valid": "2026-10-01T15:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_057.png"
+  },
+  {
+   "h": 60,
+   "valid": "2026-10-01T18:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_060.png"
+  },
+  {
+   "h": 63,
+   "valid": "2026-10-01T21:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_063.png"
+  },
+  {
+   "h": 66,
+   "valid": "2026-10-02T00:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_066.png"
+  },
+  {
+   "h": 69,
+   "valid": "2026-10-02T03:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_069.png"
+  },
+  {
+   "h": 72,
+   "valid": "2026-10-02T06:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_072.png"
+  },
+  {
+   "h": 75,
+   "valid": "2026-10-02T09:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_075.png"
+  },
+  {
+   "h": 78,
+   "valid": "2026-10-02T12:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_078.png"
+  },
+  {
+   "h": 81,
+   "valid": "2026-10-02T15:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_081.png"
+  },
+  {
+   "h": 84,
+   "valid": "2026-10-02T18:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_084.png"
+  },
+  {
+   "h": 87,
+   "valid": "2026-10-02T21:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_087.png"
+  },
+  {
+   "h": 90,
+   "valid": "2026-10-03T00:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_090.png"
+  },
+  {
+   "h": 93,
+   "valid": "2026-10-03T03:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_093.png"
+  },
+  {
+   "h": 96,
+   "valid": "2026-10-03T06:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_096.png"
+  },
+  {
+   "h": 99,
+   "valid": "2026-10-03T09:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_099.png"
+  },
+  {
+   "h": 102,
+   "valid": "2026-10-03T12:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_102.png"
+  },
+  {
+   "h": 105,
+   "valid": "2026-10-03T15:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_105.png"
+  },
+  {
+   "h": 108,
+   "valid": "2026-10-03T18:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_108.png"
+  },
+  {
+   "h": 111,
+   "valid": "2026-10-03T21:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_111.png"
+  },
+  {
+   "h": 114,
+   "valid": "2026-10-04T00:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_114.png"
+  },
+  {
+   "h": 117,
+   "valid": "2026-10-04T03:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_117.png"
+  },
+  {
+   "h": 120,
+   "valid": "2026-10-04T06:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_120.png"
+  },
+  {
+   "h": 123,
+   "valid": "2026-10-04T09:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_123.png"
+  },
+  {
+   "h": 126,
+   "valid": "2026-10-04T12:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_126.png"
+  },
+  {
+   "h": 129,
+   "valid": "2026-10-04T15:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_129.png"
+  },
+  {
+   "h": 132,
+   "valid": "2026-10-04T18:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_132.png"
+  },
+  {
+   "h": 135,
+   "valid": "2026-10-04T21:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_135.png"
+  },
+  {
+   "h": 138,
+   "valid": "2026-10-05T00:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_138.png"
+  },
+  {
+   "h": 141,
+   "valid": "2026-10-05T03:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_141.png"
+  },
+  {
+   "h": 144,
+   "valid": "2026-10-05T06:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_144.png"
+  },
+  {
+   "h": 147,
+   "valid": "2026-10-05T09:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_147.png"
+  },
+  {
+   "h": 150,
+   "valid": "2026-10-05T12:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_150.png"
+  },
+  {
+   "h": 153,
+   "valid": "2026-10-05T15:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_153.png"
+  },
+  {
+   "h": 156,
+   "valid": "2026-10-05T18:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_156.png"
+  },
+  {
+   "h": 159,
+   "valid": "2026-10-05T21:00:00Z",
+   "precip": "ecmwf/2026092906/precip3h_159.png"
+  }
+ ],
+ "wind": "ecmwf/2026092906/wind.json",
+ "points": "ecmwf/2026092906/points.json",
+ "accum": "ecmwf/2026092906/accum.json"
+}

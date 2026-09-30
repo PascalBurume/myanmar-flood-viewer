@@ -1,0 +1,286 @@
+{
+ "key": "f2026090501",
+ "model": "gfs",
+ "init": null,
+ "fetchedAt": "2026-09-05T01:06:55+00:00",
+ "source": "gfs_seamless",
+ "steps": [
+  {
+   "h": 3,
+   "valid": "2026-09-05T03:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_003.png"
+  },
+  {
+   "h": 6,
+   "valid": "2026-09-05T06:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_006.png"
+  },
+  {
+   "h": 9,
+   "valid": "2026-09-05T09:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_009.png"
+  },
+  {
+   "h": 12,
+   "valid": "2026-09-05T12:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_012.png"
+  },
+  {
+   "h": 15,
+   "valid": "2026-09-05T15:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_015.png"
+  },
+  {
+   "h": 18,
+   "valid": "2026-09-05T18:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_018.png"
+  },
+  {
+   "h": 21,
+   "valid": "2026-09-05T21:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_021.png"
+  },
+  {
+   "h": 24,
+   "valid": "2026-09-06T00:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_024.png"
+  },
+  {
+   "h": 27,
+   "valid": "2026-09-06T03:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_027.png"
+  },
+  {
+   "h": 30,
+   "valid": "2026-09-06T06:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_030.png"
+  },
+  {
+   "h": 33,
+   "valid": "2026-09-06T09:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_033.png"
+  },
+  {
+   "h": 36,
+   "valid": "2026-09-06T12:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_036.png"
+  },
+  {
+   "h": 39,
+   "valid": "2026-09-06T15:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_039.png"
+  },
+  {
+   "h": 42,
+   "valid": "2026-09-06T18:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_042.png"
+  },
+  {
+   "h": 45,
+   "valid": "2026-09-06T21:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_045.png"
+  },
+  {
+   "h": 48,
+   "valid": "2026-09-07T00:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_048.png"
+  },
+  {
+   "h": 51,
+   "valid": "2026-09-07T03:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_051.png"
+  },
+  {
+   "h": 54,
+   "valid": "2026-09-07T06:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_054.png"
+  },
+  {
+   "h": 57,
+   "valid": "2026-09-07T09:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_057.png"
+  },
+  {
+   "h": 60,
+   "valid": "2026-09-07T12:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_060.png"
+  },
+  {
+   "h": 63,
+   "valid": "2026-09-07T15:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_063.png"
+  },
+  {
+   "h": 66,
+   "valid": "2026-09-07T18:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_066.png"
+  },
+  {
+   "h": 69,
+   "valid": "2026-09-07T21:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_069.png"
+  },
+  {
+   "h": 72,
+   "valid": "2026-09-08T00:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_072.png"
+  },
+  {
+   "h": 75,
+   "valid": "2026-09-08T03:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_075.png"
+  },
+  {
+   "h": 78,
+   "valid": "2026-09-08T06:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_078.png"
+  },
+  {
+   "h": 81,
+   "valid": "2026-09-08T09:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_081.png"
+  },
+  {
+   "h": 84,
+   "valid": "2026-09-08T12:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_084.png"
+  },
+  {
+   "h": 87,
+   "valid": "2026-09-08T15:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_087.png"
+  },
+  {
+   "h": 90,
+   "valid": "2026-09-08T18:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_090.png"
+  },
+  {
+   "h": 93,
+   "valid": "2026-09-08T21:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_093.png"
+  },
+  {
+   "h": 96,
+   "valid": "2026-09-09T00:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_096.png"
+  },
+  {
+   "h": 99,
+   "valid": "2026-09-09T03:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_099.png"
+  },
+  {
+   "h": 102,
+   "valid": "2026-09-09T06:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_102.png"
+  },
+  {
+   "h": 105,
+   "valid": "2026-09-09T09:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_105.png"
+  },
+  {
+   "h": 108,
+   "valid": "2026-09-09T12:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_108.png"
+  },
+  {
+   "h": 111,
+   "valid": "2026-09-09T15:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_111.png"
+  },
+  {
+   "h": 114,
+   "valid": "2026-09-09T18:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_114.png"
+  },
+  {
+   "h": 117,
+   "valid": "2026-09-09T21:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_117.png"
+  },
+  {
+   "h": 120,
+   "valid": "2026-09-10T00:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_120.png"
+  },
+  {
+   "h": 123,
+   "valid": "2026-09-10T03:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_123.png"
+  },
+  {
+   "h": 126,
+   "valid": "2026-09-10T06:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_126.png"
+  },
+  {
+   "h": 129,
+   "valid": "2026-09-10T09:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_129.png"
+  },
+  {
+   "h": 132,
+   "valid": "2026-09-10T12:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_132.png"
+  },
+  {
+   "h": 135,
+   "valid": "2026-09-10T15:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_135.png"
+  },
+  {
+   "h": 138,
+   "valid": "2026-09-10T18:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_138.png"
+  },
+  {
+   "h": 141,
+   "valid": "2026-09-10T21:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_141.png"
+  },
+  {
+   "h": 144,
+   "valid": "2026-09-11T00:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_144.png"
+  },
+  {
+   "h": 147,
+   "valid": "2026-09-11T03:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_147.png"
+  },
+  {
+   "h": 150,
+   "valid": "2026-09-11T06:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_150.png"
+  },
+  {
+   "h": 153,
+   "valid": "2026-09-11T09:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_153.png"
+  },
+  {
+   "h": 156,
+   "valid": "2026-09-11T12:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_156.png"
+  },
+  {
+   "h": 159,
+   "valid": "2026-09-11T15:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_159.png"
+  },
+  {
+   "h": 162,
+   "valid": "2026-09-11T18:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_162.png"
+  },
+  {
+   "h": 165,
+   "valid": "2026-09-11T21:00:00Z",
+   "precip": "gfs/f2026090501/precip3h_165.png"
+  }
+ ],
+ "wind": "gfs/f2026090501/wind.json",
+ "points": "gfs/f2026090501/points.json"
+}

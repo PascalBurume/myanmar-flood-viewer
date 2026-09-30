@@ -1,0 +1,185 @@
+{
+  "schema": 1,
+  "generatedAt": "2026-09-29T16:21:50+00:00",
+  "run": {
+    "trigger": "manual",
+    "runner": "USERnoMacBook-Air.local",
+    "startedAt": "2026-09-29T16:19:24+00:00",
+    "seconds": 145.61,
+    "conclusion": "ok",
+    "stages": [
+      {
+        "key": "gate",
+        "label": "Scan window (until 2026-12-31)",
+        "state": "ok",
+        "detail": "today 2026-09-30 is within the window",
+        "startedAt": "2026-09-29T16:19:24+00:00",
+        "seconds": 0.0
+      },
+      {
+        "key": "unosat",
+        "label": "UNOSAT — flood extents, Myanmar",
+        "state": "skipped",
+        "detail": "hand-traced extents are not polled: products are 8-282 MB and the clipping is hand-tuned. The FloodAI stage covers the same source automatically.",
+        "startedAt": "2026-09-29T16:19:24+00:00",
+        "seconds": 0.0
+      },
+      {
+        "key": "floodai",
+        "label": "UNOSAT FloodAI — nationwide exposure",
+        "state": "ok",
+        "detail": "AI20260814MMR",
+        "startedAt": "2026-09-29T16:19:24+00:00",
+        "seconds": 2.2
+      },
+      {
+        "key": "adam",
+        "label": "WFP ADAM — flood impact, Myanmar",
+        "state": "ok",
+        "detail": "FL-20260806-MMR-00 (effective 2026-08-06)",
+        "startedAt": "2026-09-29T16:19:26+00:00",
+        "seconds": 5.78
+      },
+      {
+        "key": "history",
+        "label": "Flood history — multi-year series",
+        "state": "ok",
+        "detail": "146 observations, 2022-03-19 … 2026-08-20 (18.6 KB)",
+        "startedAt": "2026-09-29T16:19:32+00:00",
+        "seconds": 12.11
+      },
+      {
+        "key": "weather",
+        "label": "Rainfall and river forecast",
+        "state": "ok",
+        "detail": "7 rain points, 8 river gauges (28.0 KB)",
+        "startedAt": "2026-09-29T16:19:44+00:00",
+        "seconds": 45.95
+      },
+      {
+        "key": "cyclones",
+        "label": "Tropical cyclone tracks",
+        "state": "ok",
+        "detail": "1 storm(s), 0 with a forecast (2.9 KB)",
+        "startedAt": "2026-09-29T16:20:30+00:00",
+        "seconds": 2.46
+      },
+      {
+        "key": "field",
+        "label": "Forecast field (Open-Meteo)",
+        "state": "ok",
+        "detail": "ecmwf already have run 2026-09-29T06:00:00Z · gfs fetched 1.0 h ago, not refetched · icon fetched 1.0 h ago, not refetched (2.1 MB, 12 runs kept)",
+        "startedAt": "2026-09-29T16:20:33+00:00",
+        "seconds": 1.5
+      },
+      {
+        "key": "outlook",
+        "label": "Flood outlook (likelihood x impact)",
+        "state": "ok",
+        "detail": "5 high, 14 medium, 11 low, 298 very low, 0 unknown across 328 townships (147 KB)",
+        "startedAt": "2026-09-29T16:20:34+00:00",
+        "seconds": 75.53
+      },
+      {
+        "key": "weathernext",
+        "label": "WeatherNext 3 forecast field",
+        "state": "skipped",
+        "detail": "WeatherNext credentials not configured: set WEATHERNEXT_PROJECT (the Google Cloud project billed for egress)",
+        "startedAt": "2026-09-29T16:21:50+00:00",
+        "seconds": 0.07
+      },
+      {
+        "key": "status",
+        "label": "Write the pipeline status",
+        "state": "ok",
+        "detail": "conclusion ok",
+        "startedAt": "2026-09-29T16:21:50+00:00",
+        "seconds": 0.0
+      }
+    ]
+  },
+  "scanUntil": "2026-12-31",
+  "sources": {
+    "floodai": {
+      "label": "UNOSAT FloodAI — nationwide exposure",
+      "state": "ok",
+      "checkedAt": "2026-09-29T16:19:24+00:00",
+      "sourceUrl": "https://unosat-rm.cern.ch/FloodAI/apps/MMR/",
+      "probe": "newest AI<date>MMR service",
+      "detail": "AI20260814MMR — 616,059 people across 207 townships",
+      "event": {
+        "id": "AI20260814MMR",
+        "effective": "2026-08-08",
+        "peopleTotal": 616059
+      }
+    },
+    "unosat": {
+      "label": "UNOSAT — flood extents, Myanmar",
+      "state": "skipped",
+      "checkedAt": null,
+      "sourceUrl": "https://data.humdata.org/organization/unosat",
+      "probe": "not polled",
+      "detail": "Manual snapshot. Products are 8-282 MB and the region clipping is hand-tuned, so this source is refreshed by hand, not on a schedule."
+    },
+    "adam": {
+      "label": "WFP ADAM — flood impact, Myanmar",
+      "state": "ok",
+      "checkedAt": "2026-09-29T16:19:26+00:00",
+      "sourceUrl": "https://api.adam.geospatial.wfp.org",
+      "probe": "newest Myanmar event id",
+      "detail": "FL-20260806-MMR-00",
+      "event": {
+        "id": "FL-20260806-MMR-00",
+        "effective": "2026-08-06",
+        "cleared": "no",
+        "peopleTotal": 203422
+      }
+    }
+  },
+  "alerts": {
+    "items": [
+      {
+        "kind": "data-quality",
+        "severity": "warning",
+        "title": "25 observations have no population figure",
+        "detail": "The source reported population an order of magnitude beyond what every other archive reports for the same flooded area. Those figures are withheld; the areas are kept."
+      },
+      {
+        "kind": "cyclone",
+        "severity": "info",
+        "title": "Unnamed — tropical cyclone being tracked",
+        "detail": "NI basin, last observed 2026-09-24T00:00:00Z at 18.1N 83.7E, 35 kt.",
+        "storm": "2026266N18085",
+        "observedAt": "2026-09-24T00:00:00Z"
+      }
+    ],
+    "counts": {
+      "critical": 0,
+      "warning": 1,
+      "info": 1
+    },
+    "freshness": {
+      "runHours": 48,
+      "dataHours": 504
+    }
+  },
+  "index": {
+    "updated": "2026-08-16T01:04:14+00:00",
+    "datasetIds": [
+      "MM_Bago",
+      "MM_FloodAI",
+      "MM_Mandalay",
+      "MM_NayPyiTaw",
+      "MM_Yangon"
+    ]
+  },
+  "previous": {
+    "generatedAt": "2026-09-29T16:18:14+00:00",
+    "run": {
+      "conclusion": "ok"
+    },
+    "indexUpdated": "2026-08-16T01:04:14+00:00",
+    "datasets": {},
+    "adamEvent": "FL-20260806-MMR-00"
+  }
+}
