@@ -28,6 +28,14 @@ const TOOLS_TS = join(ROOT, 'src', 'chat', 'tools.ts')
 const MAX_STRICT = 20
 
 /**
+ * The API compiles the schemas into a grammar, and each union-typed parameter (`["string","null"]`,
+ * `anyOf`, `oneOf`) multiplies its cost, so it refuses more than this many across the tools with a
+ * 400 on every request. The seventh fault to reach a live request: the tools sat at 17 when the
+ * Outlook was added, and every question the reader asked failed.
+ */
+const MAX_UNIONS = 16
+
+/**
  * JSON Schema keywords the API rejects on a strict tool.
  *
  * They look harmless and are standard JSON Schema, which is exactly why they got written. Bounds
@@ -109,6 +117,9 @@ if (strict.length > MAX_STRICT) {
   )
 }
 
+/** Every union-typed parameter, by tool and path, counted across all tools. */
+const unions = []
+
 /** Walk a schema, reporting anything the API will not take. */
 function inspect(toolName, node, path) {
   if (!node || typeof node !== 'object') return
@@ -116,6 +127,8 @@ function inspect(toolName, node, path) {
     node.forEach((v) => inspect(toolName, v, path))
     return
   }
+
+  if (path && (Array.isArray(node.type) || node.anyOf || node.oneOf)) unions.push(`${toolName}.${path}`)
 
   for (const key of BANNED_KEYWORDS) {
     if (key in node) {
@@ -181,6 +194,14 @@ for (const t of tools) {
   }
 }
 
+if (unions.length > MAX_UNIONS) {
+  fail(
+    `${unions.length} union-typed parameters`,
+    `exceeds the API limit of ${MAX_UNIONS}, which is a 400 on every request (${unions.join(', ')})`,
+    'replace a nullable parameter with a sentinel the handler already understands — an empty string for "leave it", or an explicit "keep"/"all" member',
+  )
+}
+
 // ---- report -------------------------------------------------------------------------------
 
 if (problems.length) {
@@ -196,5 +217,5 @@ if (problems.length) {
 }
 
 console.log(
-  `  chat tools ok — ${tools.length} tools, ${strict.length}/${MAX_STRICT} strict, handlers and schemas agree`,
+  `  chat tools ok — ${tools.length} tools, ${strict.length}/${MAX_STRICT} strict, ${unions.length}/${MAX_UNIONS} union-typed, handlers and schemas agree`,
 )

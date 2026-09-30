@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import maplibregl from 'maplibre-gl'
 
 import { toFeatureCollections, type CycloneDoc, type CycloneShow } from './cyclones'
+import { LEVEL_COLOR, outlookFeatures, type OutlookDoc } from './outlook'
 import {
   activeRun,
   legendFor,
@@ -56,10 +57,55 @@ export interface OverlayState {
    * stay drawn, faint, so the two can still be read against each other.
    */
   dimFloods: boolean
+  /** The Flood Outlook's townships, drawn only on the Outlook view. `selected` is a township's
+   *  index in the document, ringed on the map when the panel picks it. */
+  outlook: { doc: OutlookDoc | null; on: boolean; selected: number | null }
 }
 
 /** How far the flood layers are quietened in the Weather view. */
 const FLOOD_DIM = 0.3
+
+// ---- the Flood Outlook ----
+//
+// One circle per township, coloured by its level. Size is the impact band, so the reader can tell a
+// red dot over a township where 40,000 people were under water from one where 1,200 were. A
+// township with no usable record is a hollow ring: absent data must not look like a quiet place.
+// "Very low" is drawn small and faint rather than hidden, so coverage stays visible.
+
+const OL = { src: 'outlook--townships', layer: 'outlook--townships-fill' } as const
+
+const OUTLOOK_LAYER: maplibregl.LayerSpecification = {
+  id: OL.layer,
+  type: 'circle',
+  source: OL.src,
+  // Highest level drawn last, so a red dot is never hidden under a faint one.
+  layout: { 'circle-sort-key': ['get', 'rank'] },
+  paint: {
+    'circle-radius': [
+      'interpolate', ['linear'], ['zoom'],
+      5, ['case', ['==', ['get', 'level'], 'very low'], 2.5,
+        ['match', ['get', 'impact'], 'severe', 9, 'significant', 6.5, 'minor', 4.5, 'minimal', 3.5, 5]],
+      9, ['case', ['==', ['get', 'level'], 'very low'], 5,
+        ['match', ['get', 'impact'], 'severe', 18, 'significant', 13, 'minor', 9, 'minimal', 7, 10]],
+    ],
+    'circle-color': [
+      'match', ['get', 'level'],
+      'high', LEVEL_COLOR.high, 'medium', LEVEL_COLOR.medium, 'low', LEVEL_COLOR.low,
+      'very low', LEVEL_COLOR['very low'], '#888888',
+    ],
+    'circle-opacity': ['match', ['get', 'level'], 'very low', 0.45, 'unknown', 0, 0.9],
+    'circle-stroke-color': ['match', ['get', 'level'], 'unknown', '#888888', '#1b1b1b'],
+    'circle-stroke-width': [
+      'case', ['boolean', ['feature-state', 'selected'], false], 3,
+      ['match', ['get', 'level'], 'very low', 0, 'unknown', 1.5, 1],
+    ],
+    'circle-stroke-opacity': ['match', ['get', 'level'], 'very low', 0, 0.8],
+  },
+}
+
+export function outlookQueryableIds(): string[] {
+  return [OL.layer]
+}
 
 // ---- the forecast field ----
 //
@@ -247,6 +293,29 @@ export function useMapOverlays(
   const fieldKey = useRef('')
   /** Frames can land out of order over a slow link; only the newest may win. */
   const fieldSeq = useRef(0)
+  /** What the outlook source holds, and which township is ringed. */
+  const outlookKey = useRef('')
+  const outlookSel = useRef<number | null>(null)
+
+  /** Refill the outlook source when the file changes, and move the selection ring. */
+  const syncOutlook = useRef(() => {
+    const map = mapRef.current
+    const src = map?.getSource(OL.src) as maplibregl.GeoJSONSource | undefined
+    if (!map || !src) return
+    const { doc, selected } = stateRef.current.outlook
+    const key = `${doc?.generatedAt ?? ''}|${doc?.townships.length ?? 0}`
+    if (key !== outlookKey.current) {
+      // Ids are positions in the file, so a new file means the old ring marks a different township.
+      if (outlookSel.current !== null) map.setFeatureState({ source: OL.src, id: outlookSel.current }, { selected: false })
+      src.setData(outlookFeatures(doc))
+      outlookKey.current = key
+      outlookSel.current = null
+    }
+    if (selected === outlookSel.current) return
+    if (outlookSel.current !== null) map.setFeatureState({ source: OL.src, id: outlookSel.current }, { selected: false })
+    if (selected !== null) map.setFeatureState({ source: OL.src, id: selected }, { selected: true })
+    outlookSel.current = selected
+  })
 
   /** Re-point the field's image and wind sources at the frame for the current moment. */
   const syncField = useRef(() => {
@@ -415,7 +484,10 @@ export function useMapOverlays(
       }
       for (const ds of index.datasets) {
         if (!ds.layers[kind.key]) continue
-        const on = kindVisible[kind.key] && datasetVisible[ds.id] ? 'visible' : 'none'
+        // On the Outlook view the exposure circles go entirely: their orange reads as the Outlook's
+        // amber, and the Outlook's own dots already carry the impact by size.
+        const outlookHides = kind.key === 'exposure' && stateRef.current.outlook.on
+        const on = kindVisible[kind.key] && datasetVisible[ds.id] && !outlookHides ? 'visible' : 'none'
         const o = (kindOpacity[kind.key] ?? 0.7) * (dimFloods ? FLOOD_DIM : 1)
         for (const spec of kind.specs(ds.id)) {
           if (!map.getLayer(spec.id)) continue
@@ -473,6 +545,12 @@ export function useMapOverlays(
       )
     }
 
+    // The outlook sits over the (dimmed) exposure circles and under the storm tracks.
+    if (!map.getSource(OL.src)) map.addSource(OL.src, { type: 'geojson', data: empty })
+    if (!map.getLayer(OL.layer)) map.addLayer(OUTLOOK_LAYER, before)
+    map.setLayoutProperty(OL.layer, 'visibility', stateRef.current.outlook.on ? 'visible' : 'none')
+    syncOutlook.current()
+
     // Tracks go in last, over the exposure circles, and the marker over everything.
     for (const { spec } of CYCLONE_TRACK_LAYERS) {
       if (!map.getLayer(spec.id)) map.addLayer(spec, before)
@@ -526,7 +604,7 @@ export function useMapOverlays(
       map.on('style.load', () => addOverlays.current())
 
       map.on('click', (e) => {
-        const ids = [...cycloneQueryableIds(), ...fieldQueryableIds(), ...queryableLayerIds(stateRef.current.index)].filter((id) => map.getLayer(id))
+        const ids = [...outlookQueryableIds(), ...cycloneQueryableIds(), ...fieldQueryableIds(), ...queryableLayerIds(stateRef.current.index)].filter((id) => map.getLayer(id))
         const features = map.queryRenderedFeatures(e.point, { layers: ids })
         clickRef.current(features, e.lngLat)
       })
@@ -537,7 +615,7 @@ export function useMapOverlays(
       }
       map.on('mouseout', unhover)
       map.on('mousemove', (e) => {
-        const ids = [...cycloneQueryableIds(), ...fieldQueryableIds(), ...queryableLayerIds(stateRef.current.index)].filter((id) => map.getLayer(id))
+        const ids = [...outlookQueryableIds(), ...cycloneQueryableIds(), ...fieldQueryableIds(), ...queryableLayerIds(stateRef.current.index)].filter((id) => map.getLayer(id))
         const hits = ids.length ? map.queryRenderedFeatures(e.point, { layers: ids }) : []
         const hit = hits.length > 0
         // Hover ring on the exposure circle on top, the one a click would describe first. Not on
@@ -581,6 +659,9 @@ export function useMapOverlays(
         rainDate.current = ''
         cycloneKey.current = ''
         fieldKey.current = ''
+        // setStyle drops the source and every feature-state with it.
+        outlookKey.current = ''
+        outlookSel.current = null
         mapRef.current.setStyle(style)
       }
     })

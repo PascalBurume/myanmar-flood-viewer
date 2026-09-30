@@ -432,7 +432,6 @@
     {
       "name": "show_chart",
       "description": "Draw a small chart in the conversation. Use when comparing more than three things, and always state the headline number in prose as well — the chart supports the answer, it does not replace it. Every chart must name its dataset and observation date in `source`. Use bars for a ranking and series for values over time; in a series, set withheld:true with value:null for an observation whose figure was withheld, so it draws hollow instead of as zero.",
-      "strict": true,
       "input_schema": {
         "type": "object",
         "additionalProperties": false,
@@ -727,7 +726,7 @@
     },
     {
       "name": "set_view_timeline",
-      "description": "Move the reader's view: switch between the Floods and Weather readings of the map, move the timeline to a moment, start or stop playback, and choose the forecast model and layer. Returns the moment actually shown, which may be the nearest one the data covers.",
+      "description": "Move the reader's view: switch between the Floods, Weather and Outlook readings of the map, move the timeline to a moment, start or stop playback, and choose the forecast model and layer. Returns the moment actually shown, which may be the nearest one the data covers.",
       "strict": true,
       "input_schema": {
         "type": "object",
@@ -738,16 +737,14 @@
             "enum": [
               "floods",
               "weather",
+              "outlook",
               "keep"
             ],
             "description": "keep leaves the current view alone."
           },
           "validTime": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "ISO time to move the timeline to, or null to leave it."
+            "type": "string",
+            "description": "ISO time to move the timeline to, or an empty string to leave it."
           },
           "play": {
             "type": "boolean",
@@ -780,6 +777,35 @@
           "model",
           "layer"
         ]
+      }
+    },
+    {
+      "name": "flood_outlook",
+      "description": "The Flood Outlook: townships placed on a likelihood x impact matrix for the next five days. Likelihood is how many of 51 ECMWF ensemble scenarios bring a heavy-rain day (>= 64.5 mm in 24 h) to the township's cell, or near one of eight river gauges how many of 51 GloFAS scenarios take the river over its 2-year flow, whichever is larger. Impact is the most people UNOSAT radar has seen under water in that township on one pass since 2022. Use for 'where may it flood next', 'which townships are at risk', 'is X in danger this week'. Inputs are all optional: place (a township, district or region name), level (high | medium | low | all; all means every township above very low), limit (1-50, default 15). A triage, not a warning.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "place": {
+            "type": "string",
+            "description": "Township, district or region to look up. Omit for the ranked list."
+          },
+          "level": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low",
+              "all"
+            ],
+            "description": "Which level to list when no place is given. all is every township above very low."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Rows to return, 1-50. 15 is a sensible default."
+          }
+        },
+        "required": []
       }
     }
   ]

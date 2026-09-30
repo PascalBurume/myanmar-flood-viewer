@@ -64,6 +64,18 @@ export function contextBlock(ctx: ChatContext): string {
     lines.push(`Attribution: ${ctx.fieldManifest.attribution}`, '')
   }
 
+  if (ctx.outlook) {
+    // Counts and dates read from the file itself; nothing here comes from a clock.
+    const o = ctx.outlook
+    lines.push('## Flood Outlook (the Outlook view)')
+    lines.push(o.note)
+    lines.push(
+      `Window ${o.window.from} to ${o.window.to}; ensemble run ${o.sources.ensemble.init ?? 'run time not published'}. ` +
+        `Townships by level: ${o.counts.high} high, ${o.counts.medium} medium, ${o.counts.low} low, ${o.counts['very low']} very low, ${o.counts.unknown} with no level.`,
+      '',
+    )
+  }
+
   lines.push('## The map right now')
   lines.push(
     `Basemap: ${ctx.map.basemap}. Imagery date: ${ctx.map.imageryDate}. Rainfall overlay: ${ctx.map.rain.on ? `on, ${ctx.map.rain.date}` : 'off'}.`,

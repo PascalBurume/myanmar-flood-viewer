@@ -1,19 +1,19 @@
 {
   "schema": 1,
-  "generatedAt": "2026-09-24T16:43:18+00:00",
+  "generatedAt": "2026-09-29T16:21:50+00:00",
   "run": {
     "trigger": "manual",
     "runner": "USERnoMacBook-Air.local",
-    "startedAt": "2026-09-24T16:40:11+00:00",
-    "seconds": 187.38,
+    "startedAt": "2026-09-29T16:19:24+00:00",
+    "seconds": 145.61,
     "conclusion": "ok",
     "stages": [
       {
         "key": "gate",
-        "label": "Scan window (until 2026-09-25)",
+        "label": "Scan window (until 2026-12-31)",
         "state": "ok",
-        "detail": "today 2026-09-25 is within the window",
-        "startedAt": "2026-09-24T16:40:11+00:00",
+        "detail": "today 2026-09-30 is within the window",
+        "startedAt": "2026-09-29T16:19:24+00:00",
         "seconds": 0.0
       },
       {
@@ -21,7 +21,7 @@
         "label": "UNOSAT — flood extents, Myanmar",
         "state": "skipped",
         "detail": "hand-traced extents are not polled: products are 8-282 MB and the clipping is hand-tuned. The FloodAI stage covers the same source automatically.",
-        "startedAt": "2026-09-24T16:40:11+00:00",
+        "startedAt": "2026-09-29T16:19:24+00:00",
         "seconds": 0.0
       },
       {
@@ -29,73 +29,81 @@
         "label": "UNOSAT FloodAI — nationwide exposure",
         "state": "ok",
         "detail": "AI20260814MMR",
-        "startedAt": "2026-09-24T16:40:11+00:00",
-        "seconds": 2.63
+        "startedAt": "2026-09-29T16:19:24+00:00",
+        "seconds": 2.2
       },
       {
         "key": "adam",
         "label": "WFP ADAM — flood impact, Myanmar",
         "state": "ok",
         "detail": "FL-20260806-MMR-00 (effective 2026-08-06)",
-        "startedAt": "2026-09-24T16:40:13+00:00",
-        "seconds": 5.83
+        "startedAt": "2026-09-29T16:19:26+00:00",
+        "seconds": 5.78
       },
       {
         "key": "history",
         "label": "Flood history — multi-year series",
         "state": "ok",
         "detail": "146 observations, 2022-03-19 … 2026-08-20 (18.6 KB)",
-        "startedAt": "2026-09-24T16:40:19+00:00",
-        "seconds": 11.02
+        "startedAt": "2026-09-29T16:19:32+00:00",
+        "seconds": 12.11
       },
       {
         "key": "weather",
         "label": "Rainfall and river forecast",
         "state": "ok",
-        "detail": "7 rain points, 8 river gauges (25.5 KB)",
-        "startedAt": "2026-09-24T16:40:30+00:00",
-        "seconds": 23.39
+        "detail": "7 rain points, 8 river gauges (28.0 KB)",
+        "startedAt": "2026-09-29T16:19:44+00:00",
+        "seconds": 45.95
       },
       {
         "key": "cyclones",
         "label": "Tropical cyclone tracks",
         "state": "ok",
-        "detail": "1 storm(s), 1 with a forecast (1.9 KB)",
-        "startedAt": "2026-09-24T16:40:53+00:00",
-        "seconds": 4.39
+        "detail": "1 storm(s), 0 with a forecast (2.9 KB)",
+        "startedAt": "2026-09-29T16:20:30+00:00",
+        "seconds": 2.46
       },
       {
         "key": "field",
         "label": "Forecast field (Open-Meteo)",
         "state": "ok",
-        "detail": "ecmwf 2026-09-24T06:00:00Z 54 steps · gfs (run time not published) 51 steps · icon (run time not published) 51 steps · ecmwf-ens 2026-09-24T06:00:00Z 54 steps, 51 members (1.4 MB, 8 runs kept)",
-        "startedAt": "2026-09-24T16:40:58+00:00",
-        "seconds": 140.07
+        "detail": "ecmwf already have run 2026-09-29T06:00:00Z · gfs fetched 1.0 h ago, not refetched · icon fetched 1.0 h ago, not refetched (2.1 MB, 12 runs kept)",
+        "startedAt": "2026-09-29T16:20:33+00:00",
+        "seconds": 1.5
+      },
+      {
+        "key": "outlook",
+        "label": "Flood outlook (likelihood x impact)",
+        "state": "ok",
+        "detail": "5 high, 14 medium, 11 low, 298 very low, 0 unknown across 328 townships (147 KB)",
+        "startedAt": "2026-09-29T16:20:34+00:00",
+        "seconds": 75.53
       },
       {
         "key": "weathernext",
         "label": "WeatherNext 3 forecast field",
         "state": "skipped",
         "detail": "WeatherNext credentials not configured: set WEATHERNEXT_PROJECT (the Google Cloud project billed for egress)",
-        "startedAt": "2026-09-24T16:43:18+00:00",
-        "seconds": 0.06
+        "startedAt": "2026-09-29T16:21:50+00:00",
+        "seconds": 0.07
       },
       {
         "key": "status",
         "label": "Write the pipeline status",
         "state": "ok",
         "detail": "conclusion ok",
-        "startedAt": "2026-09-24T16:43:18+00:00",
+        "startedAt": "2026-09-29T16:21:50+00:00",
         "seconds": 0.0
       }
     ]
   },
-  "scanUntil": "2026-09-25",
+  "scanUntil": "2026-12-31",
   "sources": {
     "floodai": {
       "label": "UNOSAT FloodAI — nationwide exposure",
       "state": "ok",
-      "checkedAt": "2026-09-24T16:40:11+00:00",
+      "checkedAt": "2026-09-29T16:19:24+00:00",
       "sourceUrl": "https://unosat-rm.cern.ch/FloodAI/apps/MMR/",
       "probe": "newest AI<date>MMR service",
       "detail": "AI20260814MMR — 616,059 people across 207 townships",
@@ -116,7 +124,7 @@
     "adam": {
       "label": "WFP ADAM — flood impact, Myanmar",
       "state": "ok",
-      "checkedAt": "2026-09-24T16:40:13+00:00",
+      "checkedAt": "2026-09-29T16:19:26+00:00",
       "sourceUrl": "https://api.adam.geospatial.wfp.org",
       "probe": "newest Myanmar event id",
       "detail": "FL-20260806-MMR-00",
@@ -139,9 +147,9 @@
       {
         "kind": "cyclone",
         "severity": "info",
-        "title": "One — tropical cyclone being tracked",
+        "title": "Unnamed — tropical cyclone being tracked",
         "detail": "NI basin, last observed 2026-09-24T00:00:00Z at 18.1N 83.7E, 35 kt.",
-        "storm": "JTWC:IO012026",
+        "storm": "2026266N18085",
         "observedAt": "2026-09-24T00:00:00Z"
       }
     ],
@@ -166,7 +174,7 @@
     ]
   },
   "previous": {
-    "generatedAt": "2026-09-05T01:11:27+00:00",
+    "generatedAt": "2026-09-29T16:18:14+00:00",
     "run": {
       "conclusion": "ok"
     },

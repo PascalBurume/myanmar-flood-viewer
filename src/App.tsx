@@ -50,6 +50,7 @@ import { useExposure } from './components/TopAffected'
 import { useHistory } from './components/Trend'
 import { Alerts } from './components/Alerts'
 import { useWeather } from './components/Weather'
+import { outlookPopupHtml, useOutlook } from './outlook'
 import {
   LAYER_KINDS,
   loadIndex,
@@ -74,6 +75,7 @@ import {
   cycloneQueryableIds,
   fieldPopupHeadings,
   fieldQueryableIds,
+  outlookQueryableIds,
   popupHeadings,
   queryableLayerIds,
   useMapOverlays,
@@ -88,6 +90,14 @@ function shiftDay(iso: string, days: number): string {
   const today = defaultImageryDate()
   const next = d.toISOString().slice(0, 10)
   return next > today ? today : next
+}
+
+/** The townships' extent, padded a little so the dots on the edge are not cut by the frame. */
+function outlookBounds(doc: ReturnType<typeof useOutlook>): [number, number, number, number] | null {
+  if (!doc?.townships.length) return null
+  const lons = doc.townships.map((t) => t.lon)
+  const lats = doc.townships.map((t) => t.lat)
+  return [Math.min(...lons) - 0.3, Math.min(...lats) - 0.3, Math.max(...lons) + 0.3, Math.max(...lats) + 0.3]
 }
 
 const STATE_WORD: Record<string, string> = {
@@ -165,6 +175,8 @@ export function App({ initialIndex }: { initialIndex: DataIndex }) {
   /** Where the reader last clicked. Lets a question be about "this spot" without them reading
    *  coordinates off the screen and typing them in. */
   const [pickedPoint, setPickedPoint] = useState<{ lon: number; lat: number; label: string } | null>(null)
+  /** The township picked on the Outlook view, by its position in outlook.json. */
+  const [outlookSel, setOutlookSel] = useState<number | null>(null)
 
   useEffect(() => applyThemeAttr(theme), [theme])
 
@@ -222,6 +234,7 @@ export function App({ initialIndex }: { initialIndex: DataIndex }) {
   const weather = useWeather(BASE_URL, dataVersion)
   const cyclones = useCyclones(BASE_URL, dataVersion)
   const fieldManifest = useForecastField(BASE_URL, dataVersion)
+  const outlook = useOutlook(BASE_URL, dataVersion)
   const sceneIndex = useSceneIndex(BASE_URL, view === '3d')
   const cyclonesState = useMemo(() => ({ doc: cyclones, show: cycloneShow }), [cyclones, cycloneShow])
   const observedTo = useMemo(() => observedUntil(cyclones), [cyclones])
@@ -255,7 +268,7 @@ export function App({ initialIndex }: { initialIndex: DataIndex }) {
    * view with the field off it used to appear anyway, carrying nothing but the fixes of a storm
    * that may be a thousand kilometres off-screen.
    */
-  const timelineOn = view !== '3d' && (view === 'weather' || fieldOn)
+  const timelineOn = view !== '3d' && view !== 'outlook' && (view === 'weather' || fieldOn)
   /**
    * The moment on show. `validTime` is null until the reader moves the scrubber, and the opening
    * moment used to be resolved twice: the timeline showed its first frame (a storm fix, badged
@@ -304,6 +317,9 @@ export function App({ initialIndex }: { initialIndex: DataIndex }) {
     }
   }, [fieldOn, fieldLayer, fieldManifest, fieldModel, fieldRunDoc, fieldStyle])
 
+  /** Whether the page opened on a camera of its own (a shared link), which framing must not override. */
+  const [hadCamera] = useState(() => /^#\d/.test(window.location.hash))
+
   /** Point-forecast reads are async; only the newest click may fill the popup. */
   const pointQuery = useRef(0)
   const onMapClick = useCallback(
@@ -322,6 +338,18 @@ export function App({ initialIndex }: { initialIndex: DataIndex }) {
       const popup = popupRef.current
       if (!popup) return
       const pointSeq = ++pointQuery.current
+
+      // The Outlook answers with its own township, told in the Outlook's words; the faint flood
+      // layers underneath are not what a click there is about.
+      if (view === 'outlook') {
+        const hit = features.find((f) => f.layer.id.startsWith('outlook--'))
+        const i = hit && typeof hit.id === 'number' ? hit.id : null
+        const t = i !== null ? outlook?.townships[i] : undefined
+        setOutlookSel(t ? i : null)
+        if (t && outlook) popup.setLngLat([t.lon, t.lat]).setHTML(outlookPopupHtml(t, outlook)).addTo(mapRef.current!)
+        else popup.remove()
+        return
+      }
 
       // On the Weather view the flood layers are drawn faint and are not what a click is about:
       // a storm or a wind arrow under the pointer still answers, anything else asks the forecast.
@@ -362,12 +390,16 @@ export function App({ initialIndex }: { initialIndex: DataIndex }) {
       }
       popup.setLngLat(lngLat).setHTML(popupHtml(own, headings)).addTo(mapRef.current!)
     },
-    [headings, places, view, fieldManifest, fieldLayer, fieldModel, fieldOn, fieldRunDoc, shownStep],
+    [headings, places, view, outlook, fieldManifest, fieldLayer, fieldModel, fieldOn, fieldRunDoc, shownStep],
   )
 
   const overlayState = useMemo(
-    () => ({ index, kindVisible, kindOpacity, datasetVisible, rain, cyclones: cyclonesState, field, dimFloods: view === 'weather' }),
-    [index, kindVisible, kindOpacity, datasetVisible, rain, cyclonesState, field, view],
+    () => ({
+      index, kindVisible, kindOpacity, datasetVisible, rain, cyclones: cyclonesState, field,
+      dimFloods: view === 'weather' || view === 'outlook',
+      outlook: { doc: outlook, on: view === 'outlook', selected: outlookSel },
+    }),
+    [index, kindVisible, kindOpacity, datasetVisible, rain, cyclonesState, field, view, outlook, outlookSel],
   )
 
   const { mapRef, addOverlays, applyIndex } = useMapOverlays(
@@ -440,6 +472,12 @@ const zoomTo = useCallback(
         : `Jumped to ${best.date}, roughly ${pct}% cloud.`,
     )
   }, [basemap, mapRef])
+
+  // A popup belongs to the reading it was opened in: an Outlook township's card left open over the
+  // Floods view would be describing dots that are no longer drawn.
+  useEffect(() => {
+    popupRef.current?.remove()
+  }, [view])
 
   useEffect(() => {
     void import('maplibre-gl').then(({ default: ml }) => {
@@ -514,6 +552,11 @@ const zoomTo = useCallback(
       mapRef.current?.fitBounds([g.west, g.south, g.east, g.north], { padding: fitPadding, duration: 800 })
       return
     }
+    const ob = outlookBounds(outlook)
+    if (view === 'outlook' && ob) {
+      mapRef.current?.fitBounds(ob, { padding: fitPadding, duration: 800 })
+      return
+    }
     const boxes = index.datasets.map((d) => d.bbox).filter((b): b is [number, number, number, number] => !!b)
     if (!boxes.length) return
     mapRef.current?.fitBounds(
@@ -525,7 +568,7 @@ const zoomTo = useCallback(
       ],
       { padding: fitPadding, duration: 800 },
     )
-  }, [index, fitPadding, mapRef, view, fieldManifest])
+  }, [index, fitPadding, mapRef, view, fieldManifest, outlook])
 
   /**
    * Switching reading. Choosing Weather used to leave the forecast switched off and the camera
@@ -536,21 +579,56 @@ const zoomTo = useCallback(
   const selectView = useCallback(
     (v: ViewKey, frame = true) => {
       setView(v)
+      if (v === 'outlook') {
+        // The Outlook is read against the whole country. The rain field would bury the township
+        // dots under a second colour scale, so it goes off; choosing Weather turns it back on.
+        setFieldOn(false)
+        const ob = outlookBounds(outlook)
+        if (frame && ob) mapRef.current?.fitBounds(ob, { padding: fitPadding, duration: 900 })
+        return
+      }
       if (v !== 'weather') return
       setFieldOn(true)
       setValidTime(null)
       const g = fieldManifest?.grid
       if (frame && g) mapRef.current?.fitBounds([g.west, g.south, g.east, g.north], { padding: fitPadding, duration: 900 })
     },
-    [fieldManifest, fitPadding, mapRef],
+    [fieldManifest, outlook, fitPadding, mapRef],
   )
+
+  /** Pick a township in the Outlook, from the panel: ring it, and bring it into view. */
+  const selectOutlook = useCallback(
+    (i: number | null) => {
+      setOutlookSel(i)
+      const t = i !== null ? outlook?.townships[i] : undefined
+      if (t) mapRef.current?.easeTo({ center: [t.lon, t.lat], zoom: Math.max(mapRef.current.getZoom(), 7.5), duration: 700 })
+    },
+    [outlook, mapRef],
+  )
+
+  /** A deep link to `?view=outlook` frames the country once the outlook arrives, as Weather does. */
+  const framedOutlook = useRef(false)
+  useEffect(() => {
+    const ob = outlookBounds(outlook)
+    if (framedOutlook.current || hadCamera || view !== 'outlook' || !ob) return
+    let tries = 0
+    const id = window.setInterval(() => {
+      const map = mapRef.current
+      if (map) {
+        framedOutlook.current = true
+        map.fitBounds(ob, { padding: fitPadding, duration: 0 })
+      }
+      if (map || ++tries > 50) window.clearInterval(id)
+    }, 100)
+    return () => window.clearInterval(id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [outlook, view, fitPadding, mapRef])
 
   /**
    * A link straight to `?view=weather` opened on the flood datasets' camera, since that is what the
    * constructor is given and the forecast manifest arrives later. Frame the forecast once it does —
    * unless the URL carried a camera of its own, which is the reader's and wins.
    */
-  const [hadCamera] = useState(() => /^#\d/.test(window.location.hash))
   const framedWeather = useRef(false)
   useEffect(() => {
     const g = fieldManifest?.grid
@@ -629,7 +707,7 @@ const zoomTo = useCallback(
           [pt.x - 5, pt.y - 5],
           [pt.x + 5, pt.y + 5],
         ]
-        const ids = [...cycloneQueryableIds(), ...fieldQueryableIds(), ...queryableLayerIds(index)].filter((id) => map.getLayer(id))
+        const ids = [...outlookQueryableIds(), ...cycloneQueryableIds(), ...fieldQueryableIds(), ...queryableLayerIds(index)].filter((id) => map.getLayer(id))
         const hits = map.queryRenderedFeatures(box, { layers: ids })
         return {
           onScreen: true,
@@ -641,7 +719,7 @@ const zoomTo = useCallback(
       inView() {
         const map = mapRef.current
         if (!map) return []
-        const ids = [...cycloneQueryableIds(), ...fieldQueryableIds(), ...queryableLayerIds(index)].filter((id) => map.getLayer(id))
+        const ids = [...outlookQueryableIds(), ...cycloneQueryableIds(), ...fieldQueryableIds(), ...queryableLayerIds(index)].filter((id) => map.getLayer(id))
         if (!ids.length) return []
         const hits = map.queryRenderedFeatures({ layers: ids })
         return hits.map((f) => ({ layer: f.layer.id, properties: (f.properties ?? {}) as Record<string, unknown> }))
@@ -662,10 +740,11 @@ const zoomTo = useCallback(
       weather,
       cyclones,
       fieldManifest,
+      outlook,
       map: { basemap, imageryDate, rain, kindVisible, kindOpacity, cycloneShow, view, field, frames, query: mapQuery },
       actions: {
         setCycloneLayer: (k: CycloneLayerKey, v: boolean) => setCycloneShow((s) => ({ ...s, [k]: v })),
-        setView: (v: 'floods' | 'weather') => selectView(v, false),
+        setView: (v: 'floods' | 'weather' | 'outlook') => selectView(v, false),
         setValidTime,
         setPlaying,
         setField: onField,
@@ -684,7 +763,7 @@ const zoomTo = useCallback(
       },
     }),
     [
-      index, places, status, history, weather, cyclones, fieldManifest,
+      index, places, status, history, weather, cyclones, fieldManifest, outlook,
       basemap, imageryDate, rain, kindVisible, kindOpacity, cycloneShow, view, field, frames, onField,
       zoomTo, handleZoom, fitAllCamera, mapQuery, selectView,
     ],
@@ -790,6 +869,9 @@ const zoomTo = useCallback(
         threeD={{ scenes: sceneIndex, sceneId, onScene: setSceneId, look: look3d, onLook: onLook3d }}
         field={field}
         onField={onField}
+        outlook={outlook}
+        outlookSelected={outlookSel}
+        onOutlookSelect={selectOutlook}
         weathernextReason={weathernextReason}
         cyclones={cyclones}
         cycloneShow={cycloneShow}
@@ -892,7 +974,7 @@ const zoomTo = useCallback(
         preload={framePreload}
       />
 
-      {view !== '3d' ? <MapLegend field={field} step={shownStep} view={view} onField={onField} /> : null}
+      {view !== '3d' ? <MapLegend field={field} step={shownStep} view={view} onField={onField} outlook={outlook} /> : null}
 
       <div id="basemap" className="basemap-switch" role="tablist" aria-label="Basemap" hidden={view === '3d'}>
         {(Object.keys(BASEMAP_LABELS) as Basemap[]).map((key) => (

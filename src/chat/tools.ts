@@ -9,6 +9,7 @@
  */
 
 import type { ViewKey } from '../view'
+import type { OutlookDoc, OutlookTownship } from '../outlook'
 import {
   findPlaces,
   nationalTotals,
@@ -64,7 +65,7 @@ export interface ChatActions {
   setImageryDate: (d: string) => void
   setRain: (r: RainState) => void
   setCycloneLayer: (layer: CycloneLayerKey, visible: boolean) => void
-  setView: (view: 'floods' | 'weather') => void
+  setView: (view: 'floods' | 'weather' | 'outlook') => void
   setValidTime: (t: string) => void
   setPlaying: (on: boolean) => void
   setField: (patch: Partial<FieldState>) => void
@@ -105,6 +106,7 @@ export interface ChatContext {
   weather: WeatherDoc | null
   cyclones: CycloneDoc | null
   fieldManifest: FieldManifest | null
+  outlook: OutlookDoc | null
   map: ChatMapState & { query: ChatMapQuery }
   actions: ChatActions
 }
@@ -1067,7 +1069,7 @@ const HANDLERS = {
 
   /** Move the reader's view: which mode, which moment, which model and layer. */
   set_view_timeline(input, ctx) {
-    const view = input.view === 'floods' || input.view === 'weather' ? input.view : null
+    const view = input.view === 'floods' || input.view === 'weather' || input.view === 'outlook' ? input.view : null
     if (view) ctx.actions.setView(view)
     const patch: Partial<FieldState> = {}
     if (input.model !== 'keep' && FIELD_MODELS.some((m) => m.key === input.model && !m.needs)) {
@@ -1101,7 +1103,7 @@ const HANDLERS = {
         view: view ?? ctx.map.view,
         model: patch.model ?? ctx.map.field.model,
         layer: patch.layer ?? ctx.map.field.layer,
-        requestedTime: input.validTime ?? null,
+        requestedTime: input.validTime || null,
         frameChosen: chosen,
         isForecast: frame?.isForecast ?? null,
         playing: Boolean(input.play),
@@ -1115,15 +1117,34 @@ const HANDLERS = {
 
   // ---- chart ----------------------------------------------------------------------------------
 
+  /**
+   * Not strict: its nested rows of nullable fields were the heaviest schema the API had to compile,
+   * and with it strict the tools were refused as "compiled grammar is too large". So the shape
+   * strict used to guarantee is checked here instead, row by row — a malformed row is dropped
+   * rather than drawn, and a chart left with none is an error the model is told about.
+   */
   show_chart(input) {
-    const rows = Array.isArray(input.rows) ? (input.rows as ChartSpec['rows']) : []
-    if (!rows.length) throw new Error('a chart needs at least one row')
-    if (!input.source) throw new Error('a chart must name its dataset and observation date in `source`')
+    const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null)
+    const rows: ChartSpec['rows'] = (Array.isArray(input.rows) ? input.rows : [])
+      .filter((r): r is Record<string, unknown> => !!r && typeof r === 'object' && typeof (r as { label?: unknown }).label === 'string')
+      .map((r) => ({
+        label: r.label as string,
+        sub: typeof r.sub === 'string' ? r.sub : null,
+        value: num(r.value),
+        withheld: r.withheld === true,
+        lon: num(r.lon),
+        lat: num(r.lat),
+      }))
+    if (!rows.length) throw new Error('a chart needs at least one row with a string label')
+    if (typeof input.source !== 'string' || !input.source.trim()) {
+      throw new Error('a chart must name its dataset and observation date in `source`')
+    }
+    const units = ['people', 'km2', 'mm', 'm3s', 'count', 'percent']
     const spec: ChartSpec = {
       chart: input.chart === 'series' ? 'series' : 'bars',
       title: String(input.title ?? ''),
-      unit: String(input.unit ?? 'count'),
-      source: String(input.source),
+      unit: typeof input.unit === 'string' && units.includes(input.unit) ? input.unit : 'count',
+      source: input.source,
       caveat: typeof input.caveat === 'string' ? input.caveat : null,
       rows: rows.slice(0, 40),
     }
@@ -1175,6 +1196,93 @@ const HANDLERS = {
       },
       dataset: 'the local pipeline runner',
       caveats: [],
+    })
+  },
+
+  /**
+   * The Flood Outlook, per township. Not strict — the twenty strict slots are taken — so every
+   * input is checked here the way `rank_places` checks its own, and a bad value falls back to the
+   * default rather than failing the turn.
+   */
+  flood_outlook(input, ctx) {
+    const doc = ctx.outlook
+    if (!doc) throw new Error('the outlook has not been built yet; the pipeline writes it after the forecast field')
+    const place = typeof input.place === 'string' && input.place.trim() ? input.place.trim().toLowerCase() : null
+    const level = typeof input.level === 'string' && ['high', 'medium', 'low', 'all'].includes(input.level) ? input.level : 'all'
+    const limit = Math.min(Math.max(Math.round(Number(input.limit)) || 15, 1), 50)
+
+    const matched = place
+      ? doc.townships.filter((t) =>
+          [t.name, t.region, t.district ?? ''].some((n) => n.toLowerCase().includes(place)),
+        )
+      : doc.townships.filter((t) => (level === 'all' ? t.level !== null && t.level !== 'very low' : t.level === level))
+    const row = (t: OutlookTownship) => ({
+      township: t.name,
+      region: t.region,
+      district: t.district,
+      level: t.level ?? 'none (no usable population record)',
+      likelihood: {
+        band: t.likelihood.band,
+        sharePct: t.likelihood.pct,
+        from: t.likelihood.driver,
+        rain: {
+          scenariosWithHeavyDay: t.likelihood.rain.members,
+          scenariosWithVeryHeavyDay: t.likelihood.rain.veryHeavy,
+          of: t.likelihood.rain.of,
+        },
+        river: t.likelihood.river
+          ? {
+              gauge: t.likelihood.river.gauge,
+              km: t.likelihood.river.km,
+              scenariosOver2YearFlow: t.likelihood.river.members,
+              of: t.likelihood.river.of,
+              twoYearFlowM3s: t.likelihood.river.flow2,
+            }
+          : null,
+      },
+      impact: t.impact
+        ? {
+            band: t.impact.band,
+            mostPeopleSeenUnderWater: t.impact.people,
+            onDate: t.impact.date,
+            product: t.impact.service,
+            floodedKm2ThatPass: t.impact.floodedKm2,
+            passesOnRecord: t.impact.passes,
+            passesWithheld: t.impact.withheld,
+          }
+        : null,
+      ecmwfRainMm: t.rain ? { windowTotal: t.rain.total, wettestDay: t.rain.wettest24 } : null,
+      lon: t.lon,
+      lat: t.lat,
+    })
+    return env({
+      data: {
+        window: doc.window,
+        ensembleRun: doc.sources.ensemble.init,
+        counts: doc.counts,
+        heavyRainMm: doc.method.heavyMm,
+        veryHeavyRainMm: doc.method.veryHeavyMm,
+        likelihoodBands: doc.method.likelihoodBands,
+        impactBands: doc.method.impactBands,
+        matched: matched.length,
+        townships: matched.slice(0, limit).map(row),
+        gauges: doc.gauges.map((g) => ({
+          name: g.name,
+          twoYearFlowM3s: g.returnFlow['2'],
+          fiveYearFlowM3s: g.returnFlow['5'],
+          scenariosOver2YearFlow: g.ensemble?.over2 ?? null,
+          of: g.ensemble?.members ?? null,
+        })),
+        note: doc.note,
+      },
+      dataset: `Flood Outlook: ${doc.sources.ensemble.label}; GloFAS via Open-Meteo; ${doc.sources.history.label}`,
+      generatedAt: doc.generatedAt,
+      caveats: [
+        ...doc.caveats,
+        'Quote likelihood as "N of 51 scenarios", never as a percentage chance of flooding.',
+        'Impact is what radar saw there before. Never present it as a number of people who will be affected.',
+        place && !matched.length ? `No township, district or region matches "${input.place}". Say so rather than guessing a nearby one.` : '',
+      ].filter(Boolean),
     })
   },
 } satisfies Record<string, Handler>

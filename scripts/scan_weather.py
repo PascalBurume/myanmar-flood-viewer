@@ -45,9 +45,15 @@ import json
 import sys
 import urllib.parse
 
-from common import INDEX_PATH, fetch, utcnow
+from datetime import date, timedelta
+
+from common import INDEX_PATH, ROOT, fetch, utcnow
 
 WEATHER_PATH = INDEX_PATH.parent / 'weather.json'
+# Return-period flows per gauge, built once by scripts/river_climatology.py.
+CLIMATOLOGY_PATH = ROOT / 'data' / 'river_climatology.json'
+# The Outlook's window in days, today included. Matches its 120-hour rain window.
+OUTLOOK_DAYS = 5
 
 # Region rainfall points. Town centres are fine here — rainfall is a smooth field, unlike discharge.
 RAIN_POINTS = [
@@ -110,8 +116,44 @@ def rainfall() -> list[dict]:
     return out
 
 
+def climatology() -> dict[str, dict]:
+    """Return-period flows by gauge name, or {} before river_climatology.py has been run."""
+    try:
+        doc = json.loads(CLIMATOLOGY_PATH.read_text(encoding='utf-8'))
+    except Exception:  # noqa: BLE001 - absent: rivers are still written, without thresholds
+        return {}
+    return {g['name']: {**g, 'method': doc.get('method'), 'source': doc.get('source')} for g in doc.get('gauges', [])}
+
+
+def members_over(lat: float, lon: float, levels: dict[str, float], today: str) -> dict:
+    """How many of the GloFAS members reach each return flow on any day in the Outlook window.
+
+    Counted per member, not from the ensemble maximum: "one member of 51 touches the 2-year flow"
+    and "all 51 do" have the same maximum and are very different forecasts.
+    """
+    d = api(
+        'https://flood-api.open-meteo.com/v1/flood',
+        latitude=lat, longitude=lon, daily='river_discharge', forecast_days=7, ensemble='true',
+    )
+    day = d['daily']
+    first = date.fromisoformat(today)
+    window = {(first + timedelta(days=k)).isoformat() for k in range(OUTLOOK_DAYS)}
+    idx = [i for i, t in enumerate(day['time']) if t in window]
+    keys = [k for k in day if k.startswith('river_discharge')]
+    peaks = []
+    for k in keys:
+        vals = [day[k][i] for i in idx if day[k][i] is not None]
+        if vals:
+            peaks.append(max(vals))
+    out = {'members': len(peaks), 'window': [min(window), max(window)]}
+    for rp, flow in levels.items():
+        out[f'over{rp}'] = sum(1 for p in peaks if p >= flow)
+    return out
+
+
 def rivers() -> list[dict]:
     out = []
+    clim = climatology()
     for name, lat, lon, typical in RIVER_POINTS:
         d = api(
             'https://flood-api.open-meteo.com/v1/flood',
@@ -143,9 +185,24 @@ def rivers() -> list[dict]:
             'cellSuspect': drifted or None,
             'offsetFromTown': True,
         })
+        # Against the river's own history, where it has been computed: the flow that, in GloFAS's
+        # reanalysis of this same cell, is reached on average once in two years (and five). A
+        # forecast over it is how GloFAS itself decides a river is in flood.
+        g = clim.get(name)
+        if g:
+            levels = {k: g['returnFlow'][k] for k in ('2', '5') if k in g['returnFlow']}
+            out[-1]['returnFlow'] = levels
+            out[-1]['climatology'] = f"{g['method']} {len(g['years'])} seasons."
+            try:
+                ens = members_over(lat, lon, levels, today)
+                out[-1]['ensemble'] = ens
+            except Exception as e:  # noqa: BLE001 - the thresholds still draw without the count
+                print(f'  {name}: ensemble unavailable ({e})')
         flag = '  ** flow is far from the value this cell was chosen at' if drifted else ''
+        ens = out[-1].get('ensemble')
+        over = f"   {ens['over2']}/{ens['members']} over 2-yr" if ens else ''
         print(f"  {name:<26} now {now['q']:>8,} m3/s   peak ahead {peak['q']:>8,} "
-              f"on {peak['date']}{flag}")
+              f"on {peak['date']}{over}{flag}")
     return out
 
 

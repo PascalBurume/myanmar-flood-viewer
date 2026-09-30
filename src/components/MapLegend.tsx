@@ -11,6 +11,35 @@ import {
 } from '../forecastField'
 import { formatMMT } from '../time'
 import type { ViewKey } from '../view'
+import { LEVEL_COLOR, cap, type Level, type OutlookDoc } from '../outlook'
+
+/**
+ * The Outlook's key: what the colour is, what the size is, and what a hollow ring means. The last
+ * is the one a reader would otherwise get wrong, reading "no record" as "no danger".
+ */
+function OutlookKey({ doc }: { doc: OutlookDoc }) {
+  const levels: Level[] = ['high', 'medium', 'low', 'very low']
+  return (
+    <div className="map-legend ol-key" aria-label="Flood outlook key">
+      <p className="map-legend-head">
+        <strong>Flood outlook</strong> · forecast, not a warning
+      </p>
+      <div className="ol-key-row">
+        {levels.map((lv) => (
+          <span className="ol-key-item" key={lv}>
+            <span className="ol-dot" style={{ background: LEVEL_COLOR[lv] }} aria-hidden="true" />
+            {cap(lv)}
+          </span>
+        ))}
+        <span className="ol-key-item">
+          <span className="ol-dot is-hollow" aria-hidden="true" />
+          No record
+        </span>
+      </div>
+      <p className="map-legend-note">{`Colour: likelihood × impact over the next ${doc.window.hours / 24} days. Size: most people seen under water on one pass.`}</p>
+    </div>
+  )
+}
 
 /**
  * The key for the forecast field, on the map rather than in the panel.
@@ -30,12 +59,15 @@ export function MapLegend({
   step,
   view,
   onField,
+  outlook = null,
 }: {
   field: FieldState
   step: FieldStep | null
   view: ViewKey
   onField: (patch: Partial<FieldState>) => void
+  outlook?: OutlookDoc | null
 }) {
+  if (view === 'outlook') return outlook ? <OutlookKey doc={outlook} /> : null
   const manifest = field.manifest
   if (!manifest) return null
   // Hidden from here, the key folds to one line on the Weather view rather than vanishing, so the

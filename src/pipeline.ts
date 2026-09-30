@@ -285,6 +285,7 @@ const SHORT_LABEL: Record<string, string> = {
   weather: 'Rain & rivers',
   cyclones: 'Cyclones',
   field: 'Forecast field',
+  outlook: 'Outlook',
   weathernext: 'WN3 field',
   publish: 'Build & publish',
   commit: 'Commit data',

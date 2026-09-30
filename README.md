@@ -549,6 +549,42 @@ It fetches terrain tiles and footprint tiles once (tens of MB, gitignored) and w
 under `public/data/scenes/`, which is committed. At runtime the 3D view fetches only map tiles —
 the imagery, the vector basemap, and the terrain.
 
+### The Outlook view
+
+A fourth reading of the map (`?view=outlook`): **where the next five days could bring flooding**,
+township by township. It is a forecast-derived triage, **not a warning**. Myanmar's Department of
+Meteorology and Hydrology issues warnings.
+
+Each of 328 townships is placed on two separate axes and shown with the figure behind each:
+
+| Axis | What it is | Where it comes from |
+|---|---|---|
+| **Likelihood** (forecast) | How many of 51 scenarios bring a heavy-rain day (≥ 64.5 mm in 24 h, IMD's "heavy" line) to the township's cell. Within 25 km of a river gauge, how many of 51 take the river over its **2-year flow**. The larger counts. | ECMWF IFS ensemble and GloFAS ensemble, via Open-Meteo |
+| **Impact** (observed) | The most people radar has seen under water in that township on one pass since 2022 | UNOSAT FloodAI archive, 5 products |
+
+The two meet in a likelihood × impact matrix, the shape the UK Flood Forecasting Centre uses, which
+gives each township Very low, Low, Medium or High. On the map, colour is the level and size is the
+impact, and a hollow ring means no usable record. The panel lists the townships with both reasons
+("25 of 51 scenarios bring a ≥ 64.5 mm day · up to 43,089 people seen under water, 2026-08-08"). The
+matrix filters the list, and every figure carries a numbered source.
+
+The same forecast is not a probability. A share of 51 members is the spread of one model, and the
+panel never turns it into "a 49% chance". The impact is what happened there before, not a
+prediction of who will be affected.
+
+The river thresholds are a Gumbel fit to 25 years of GloFAS's own reanalysis at the same channel
+cells. GloFAS derives its flood thresholds the same way. They are built once and committed, since
+they cost about 3,000 Open-Meteo calls:
+
+```sh
+python3 scripts/river_climatology.py            # writes data/river_climatology.json
+python3 scripts/outlook.py --print              # rebuild the outlook by hand
+```
+
+The same 2-year and 5-year flows are drawn as dashed and dotted lines on every river chart in the
+Floods panel. The Outlook costs no forecast calls of its own: the forecast-field scanner writes
+the rain totals it needs (`accum.json`) from data already fetched.
+
 ### What is and is not automated
 
 **ADAM is polled** twice a day (~20 KB per check). Only the newest event's impact table is publicly
@@ -561,7 +597,7 @@ map, so it is refreshed by hand with `scripts/convert_unosat.py` and recorded in
 
 ### Scan deadline
 
-Past `SCAN_UNTIL` (an env var, defaulted in `scripts/run_pipeline.py`), a run exits without doing anything. Extend the date to keep going.
+Past `SCAN_UNTIL` (an env var, defaulted in `scripts/run_pipeline.py`), a run exits without doing anything. Extend the date to keep going. That includes the forecasts and the Outlook: past the deadline, none of them refresh.
 
 ## Directories
 

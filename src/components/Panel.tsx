@@ -26,6 +26,8 @@ import { WeatherControls } from './WeatherControls'
 import type { FieldState } from '../forecastField'
 import type { CycloneDoc, CycloneLayerKey, CycloneShow, Storm } from '../cyclones'
 import { Weather, type WeatherDoc } from './Weather'
+import { OutlookHeader, OutlookList, OutlookMatrix, OutlookRivers, OutlookSources, useMatrixCell } from './Outlook'
+import type { OutlookDoc } from '../outlook'
 import { defaultRainDate } from '../basemap'
 
 export interface RainState {
@@ -395,6 +397,9 @@ export function Panel({
   threeD,
   field,
   onField,
+  outlook,
+  outlookSelected,
+  onOutlookSelect,
   weathernextReason,
   chat,
   onRunPipeline,
@@ -440,6 +445,9 @@ export function Panel({
   }
   field: FieldState
   onField: (patch: Partial<FieldState>) => void
+  outlook: OutlookDoc | null
+  outlookSelected: number | null
+  onOutlookSelect: (i: number | null) => void
   weathernextReason: string | null
   chat: ChatContext
   onRunPipeline: () => void
@@ -453,6 +461,7 @@ export function Panel({
   /** A statistic the reader asked about. The counter lets the same one be asked about twice. */
   const [explain, setExplain] = useState<ExplainRequest | null>(null)
   const explainSeq = useRef(0)
+  const [olCell, setOlCell] = useMatrixCell()
   const totals = nationalTotals(places)
   const observed = observedRange(places)
   const group = index.datasets.find((d) => d.group)?.group
@@ -469,7 +478,7 @@ export function Panel({
         {/* One map, two readings of it: what the water has done, and what the weather is about to
             do. Kept in the header so it stays reachable when the panel is collapsed. */}
         <div className="view-switch seg" role="tablist" aria-label="View">
-          {(['floods', 'weather', '3d'] as const).map((v) => (
+          {(['floods', 'weather', 'outlook', '3d'] as const).map((v) => (
             <button
               key={v}
               type="button"
@@ -528,7 +537,7 @@ export function Panel({
             aria-controls={`panel-${key}`}
             onClick={() => setTab(key)}
           >
-            {key === 'layers' ? (view === 'floods' ? 'Layers' : view === '3d' ? 'Scenes' : 'Controls') : 'Assistant'}
+            {key === 'layers' ? (view === 'floods' ? 'Layers' : view === '3d' ? 'Scenes' : view === 'outlook' ? 'Outlook' : 'Controls') : 'Assistant'}
           </button>
         ))}
       </div>
@@ -568,6 +577,33 @@ export function Panel({
           <Field label="Data &amp; updates">{pipelineSummary}</Field>
           <footer className="panel-foot is-inline">{footer}</footer>
         </div>
+
+      <div className="panel-body" id="panel-outlook" role="tabpanel" aria-labelledby="tab-layers" hidden={view !== 'outlook' || tab !== 'layers'}>
+        <Field label={outlook ? `Flood outlook · next ${outlook.window.hours / 24} days` : 'Flood outlook'}>
+          <OutlookHeader doc={outlook} />
+        </Field>
+        {outlook ? (
+          <>
+            <Field
+              label="Likelihood × impact"
+              action={olCell ? <button type="button" className="mini-btn" onClick={() => setOlCell(null)}>Clear filter</button> : null}
+            >
+              <OutlookMatrix doc={outlook} cell={olCell} onCell={setOlCell} />
+            </Field>
+            <Field label={olCell ? 'Townships in that cell' : 'Townships to watch'}>
+              <OutlookList doc={outlook} cell={olCell} selected={outlookSelected} onSelect={onOutlookSelect} />
+            </Field>
+            <Field label="Rivers against their 2-year flow">
+              <OutlookRivers doc={outlook} />
+            </Field>
+            <Field label="Sources and limits">
+              <OutlookSources doc={outlook} />
+            </Field>
+          </>
+        ) : null}
+        <Field label="Data &amp; updates">{pipelineSummary}</Field>
+        <footer className="panel-foot is-inline">{footer}</footer>
+      </div>
 
       <div className="panel-body" id="panel-3d" role="tabpanel" aria-labelledby="tab-layers" hidden={view !== '3d' || tab !== 'layers'}>
         <ThreeDControls {...threeD} />

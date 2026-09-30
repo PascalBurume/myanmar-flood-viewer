@@ -2634,7 +2634,9 @@ body {
   top: 3px;
   bottom: 3px;
   left: 3px;
-  width: calc((100% - 6px) / 3);
+  /* One share per view. The count is written here and in Panel's button list; a fourth view
+     (Outlook) that only changed the list left the pill a third wide and short of its button. */
+  width: calc((100% - 6px) / 4);
   border-radius: 999px;
   background: var(--accent);
   box-shadow: 0 1px 3px rgba(16, 24, 40, 0.25);
@@ -2647,6 +2649,10 @@ body {
 
 .view-switch:has(.seg-btn:nth-child(3).is-on)::before {
   transform: translateX(200%);
+}
+
+.view-switch:has(.seg-btn:nth-child(4).is-on)::before {
+  transform: translateX(300%);
 }
 
 .view-switch .seg-btn {
@@ -3669,4 +3675,298 @@ body {
 .scene-card .mini-btn {
   flex: none;
   white-space: nowrap;
+}
+
+/* ---- The Flood Outlook (src/components/Outlook.tsx, MapLegend's OutlookKey) ----
+   Level colours are one table in src/outlook.ts, shared with the map, so the swatches take them
+   inline rather than from tokens that could drift. Every block here that clips its corners with
+   `overflow: hidden` also sets `flex: none`, for the reason given at .summary-band. */
+.ol-notice strong {
+  font-weight: 700;
+}
+
+.ol-window {
+  margin: 6px 0 6px;
+  font-size: 11px;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.ol-counts {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.ol-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 5px;
+  border-radius: 50%;
+  vertical-align: 1px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25);
+}
+
+.ol-dot.is-hollow {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px #888888;
+}
+
+.ol-chip {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.ol-chip.is-unknown {
+  background: transparent;
+  color: var(--ink-3);
+  box-shadow: inset 0 0 0 1px var(--line-2);
+}
+
+/* The matrix. Likelihood rises up the page, impact to the right, as the FFC draws it. */
+.ol-matrix {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: none;
+}
+
+.ol-grid {
+  display: grid;
+  gap: 3px;
+  align-items: stretch;
+}
+
+.ol-axis {
+  font-size: 10px;
+  color: var(--ink-3);
+}
+
+.ol-axis-x {
+  text-align: right;
+}
+
+.ol-col-head,
+.ol-row-head {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--ink-2);
+}
+
+.ol-col-head {
+  align-items: center;
+  text-align: center;
+}
+
+.ol-row-head {
+  padding-right: 4px;
+}
+
+.ol-col-head small,
+.ol-row-head small {
+  font-size: 9.5px;
+  font-weight: 400;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.ol-cell {
+  min-height: 30px;
+  border: 0;
+  border-radius: 7px;
+  /* The level this cell maps to, faint behind its count: the matrix reads as a heat map at a
+     glance and still leaves the number the loudest thing in the cell. */
+  background: color-mix(in srgb, var(--cell) 34%, transparent);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.ol-cell.is-empty {
+  background: color-mix(in srgb, var(--cell) 14%, transparent);
+  color: var(--ink-3);
+  font-weight: 400;
+}
+
+.ol-cell:hover {
+  transform: translateY(-1px);
+}
+
+.ol-cell.is-on {
+  box-shadow: 0 0 0 2px var(--ink);
+}
+
+.ol-cell:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.ol-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ol-row-item.is-selected {
+  background: var(--hover);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.ol-why {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.ol-why.is-soft {
+  color: var(--ink-3);
+  font-size: 10.5px;
+}
+
+.ol-more {
+  align-self: flex-start;
+  margin-top: 4px;
+}
+
+.ol-rivers {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ol-sources {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ol-source-list,
+.ol-caveats {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+
+.ol-caveats li {
+  padding-left: 10px;
+  text-indent: -10px;
+  color: var(--ink-3);
+}
+
+.ol-caveats li::before {
+  content: '·';
+  display: inline-block;
+  width: 10px;
+  text-indent: 0;
+}
+
+.ol-sup {
+  display: inline-block;
+  min-width: 12px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.ol-pop .ol-chip {
+  display: inline-block;
+  margin-bottom: 4px;
+}
+
+.ol-pop p {
+  margin: 2px 0;
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.ol-pop .ol-pop-note {
+  color: #6b7280;
+  font-size: 10.5px;
+}
+
+/* The Outlook's key on the map. No timeline on this view, so on a wide screen it sits lower; on a
+   phone the ordinary legend rule (top, under the header) applies unchanged. */
+@media (min-width: 641px) {
+  .map-legend.ol-key {
+    /* Clear of the basemap switch (bottom 34px, about 30px tall). */
+    bottom: 74px;
+  }
+}
+
+.ol-key-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin: 6px 0 2px;
+}
+
+.ol-key-item {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10.5px;
+  color: var(--ink-2);
+}
+
+/* Return-period flows across a river's bars (src/components/Weather.tsx, RiverRow). Dashed for
+   the 2-year flow, dotted for the 5-year, so neither can be mistaken for a bar. */
+.wx-bars.is-river {
+  position: relative;
+}
+
+.wx-rp {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  border-top: 1.5px dashed var(--critical);
+  opacity: 0.8;
+  pointer-events: auto;
+}
+
+.wx-rp.is-5 {
+  border-top-style: dotted;
+  opacity: 0.6;
+}
+
+.wx-rp-note {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 2px 0 0;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.wx-rp-key {
+  flex: none;
+  width: 12px;
+  border-top: 1.5px dashed var(--critical);
+}
+
+/* On a phone the key sits over the map under the header, so it keeps to the swatches. */
+@media (max-width: 640px) {
+  .map-legend.ol-key .map-legend-note {
+    display: none;
+  }
 }

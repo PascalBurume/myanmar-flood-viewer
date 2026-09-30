@@ -39,6 +39,12 @@ export interface RiverPoint {
   /** Whether the gauge sits off the town it is named for. It usually does, deliberately: the cell
    *  is a channel cell, not the town's own coordinates. */
   offsetFromTown?: boolean
+  /** Flows reached on average once in 2 and 5 years at this cell, from GloFAS's own reanalysis
+   *  (scripts/river_climatology.py). Absent until that has been built. */
+  returnFlow?: Record<string, number>
+  climatology?: string
+  /** GloFAS members reaching each return flow in the Outlook's window. */
+  ensemble?: { members: number; over2: number; over5: number; window: [string, string] }
 }
 
 export interface WeatherDoc {
@@ -165,7 +171,11 @@ export function riverFacts(point: RiverPoint) {
 
 function RiverRow({ point }: { point: RiverPoint }) {
   const all = point.days
-  const max = Math.max(...all.map((d) => d.hi || d.q), 1)
+  const rp2 = point.returnFlow?.['2']
+  const rp5 = point.returnFlow?.['5']
+  // The thresholds are part of the scale, or a line above the peak would fall off the chart — and
+  // "the river is nowhere near flood flow" is exactly the reading that line exists to give.
+  const max = Math.max(...all.map((d) => d.hi || d.q), rp2 ?? 0, rp5 ?? 0, 1)
   const change = riverFacts(point).changeRatio
   return (
     <div className="wx-row">
@@ -176,6 +186,8 @@ function RiverRow({ point }: { point: RiverPoint }) {
         </span>
       </div>
       <div className="wx-bars is-river">
+        {rp2 ? <span className="wx-rp" style={{ bottom: `${(rp2 / max) * 100}%` }} title={`2-year flow: ${rp2.toLocaleString()} m³/s`} /> : null}
+        {rp5 ? <span className="wx-rp is-5" style={{ bottom: `${(rp5 / max) * 100}%` }} title={`5-year flow: ${rp5.toLocaleString()} m³/s`} /> : null}
         {all.map((d) => {
           const ahead = d.date > point.today
           return (
@@ -205,6 +217,14 @@ function RiverRow({ point }: { point: RiverPoint }) {
           {Math.abs(Math.round(change * 100))}% by {shortDate(point.peakDate)}
         </span>
       </div>
+      {rp2 ? (
+        <p className="wx-rp-note">
+          <span className="wx-rp-key" aria-hidden="true" />
+          {`2-year flow ${rp2.toLocaleString()} m³/s`}
+          {rp5 ? ` · 5-year ${rp5.toLocaleString()}` : ''}
+          {point.ensemble ? ` · ${point.ensemble.over2} of ${point.ensemble.members} scenarios reach the 2-year flow in the next 5 days` : ''}
+        </p>
+      ) : null}
       {point.cellSuspect ? (
         <p className="wx-warn">
           This flow is far from what the cell read when it was chosen — it may have drifted off the

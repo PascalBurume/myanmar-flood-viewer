@@ -54,6 +54,7 @@ const TOOL_LABEL: Record<ToolName, string> = {
   cyclone_tracks: 'cyclone tracks',
   forecast_field: 'forecast field',
   set_view_timeline: 'moved the view',
+  flood_outlook: 'flood outlook',
 }
 
 const SUGGESTIONS = [

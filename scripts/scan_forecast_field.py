@@ -18,6 +18,7 @@ What is written
     public/data/field/<model>/<run>/wind.json        10 m wind on a 1° subgrid, numbers only
     public/data/field/<model>/<run>/points.json      values at the named points, for the assistant
     public/data/field/ecmwf-ens/<run>/prob25_LLL.png share of members over 25 mm in 3 h (and 50)
+    public/data/field/<model>/<run>/accum.json       rain totals over the Outlook's 120-h window
 
 The grid is 0.5° (about 55 km) over 92–102°E, 9.5–28.5°N: 819 points. The models themselves are
 0.25°, so each block is the *sampling*, not the weather — the panel says that too. Open-Meteo caps a
@@ -341,6 +342,73 @@ def valid_from(init: str | None, fetched: str) -> str:
     return floored.strftime('%Y-%m-%dT%H:%M:%SZ')
 
 
+# ---- accumulations for the Outlook ----
+#
+# The PNGs hold classes, not millimetres, so the Outlook cannot read amounts back out of them. These
+# numbers come from the same hourly series while it is still in memory, and cost no extra request.
+
+OUTLOOK_HOURS = 120
+DAY_H = 24
+
+
+def window_start(init: str | None, fetched: str) -> str:
+    """The Outlook counts from the moment the forecast was read, not from its init.
+
+    An 00Z ensemble read at 15Z has already "forecast" fifteen hours that have now happened. Counting
+    them would let rain the reader cannot do anything about raise a township's level.
+    """
+    start = valid_from(init, fetched)
+    now = datetime.strptime(fetched[:19], '%Y-%m-%dT%H:%M:%S').replace(tzinfo=timezone.utc, minute=0, second=0)
+    return max(_utc(start), now).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+
+def window_indices(times: list[str], start: str, hours: int = OUTLOOK_HOURS) -> list[int]:
+    """Indices of the hourly values inside the window.
+
+    An hourly value is the rain of the hour *ending* at its timestamp, so the value stamped with the
+    start itself belongs to the hour before it and is excluded, and the one stamped with the end is
+    included.
+    """
+    return [i for i, t in enumerate(times) if 0 < lead_hours(start, t) <= hours]
+
+
+def wettest_span(values: list, idx: list[int], span: int = DAY_H) -> float | None:
+    """The largest total over any `span` consecutive hours inside the window, as a running sum.
+
+    A window containing a missing hour is skipped rather than counted short, since a short count
+    would read as a drier day than the forecast says.
+    """
+    best, total, gaps = None, 0.0, 0
+    for j, i in enumerate(idx):
+        v = values[i]
+        gaps += v is None
+        total += v or 0
+        if j >= span:
+            old = values[idx[j - span]]
+            gaps -= old is None
+            total -= old or 0
+        if j >= span - 1 and not gaps and (best is None or total > best):
+            best = total
+    return round(best, 1) if best is not None else None
+
+
+def window_total(values: list, idx: list[int]) -> float | None:
+    if not idx or any(values[i] is None for i in idx):
+        return None
+    return round(sum(values[i] for i in idx), 1)
+
+
+def accum_doc(model: str, init: str | None, fetched: str, start: str, grid, **fields) -> dict:
+    lats, lons, rows, cols = grid_points(grid)
+    end = (_utc(start) + timedelta(hours=OUTLOOK_HOURS)).strftime('%Y-%m-%dT%H:%M:%SZ')
+    return {
+        'model': model, 'init': init, 'fetchedAt': fetched,
+        'window': {'from': start, 'to': end, 'hours': OUTLOOK_HOURS},
+        'grid': {'lats': lats, 'lons': lons, 'step': grid[4], 'order': 'row-major, north to south'},
+        'unit': 'mm', **fields,
+    }
+
+
 def raster(values: list[list[float | None]], stops: list[float], grid=GRID) -> list[bytes]:
     """PNG rows (Mercator-spaced) of palette indices from a rows×cols value grid."""
     return [bytes(classify(v, stops) for v in values[r]) for r in mercator_rows(grid)]
@@ -440,9 +508,18 @@ def write_model_runs(wanted: list[tuple[str, str, str, bool]], fetched: str, pac
             'model': key, 'label': label, 'init': init, 'fetchedAt': fetched, 'unit': 'mm / 3 h',
             'cellDeg': GRID[4], 'points': points,
         }, separators=(',', ':')) + '\n', encoding='utf-8')
+        ws = window_start(init, fetched)
+        idx = window_indices(times, ws)
+        series = [col(locs[i]['hourly'], 'precipitation', model_id) for i in range(rows * cols)]
+        (tmp / 'accum.json').write_text(json.dumps(accum_doc(
+            key, init, fetched, ws, GRID,
+            total=[window_total(s, idx) for s in series],
+            wettest24=[wettest_span(s, idx) for s in series],
+        ), separators=(',', ':')) + '\n', encoding='utf-8')
         (tmp / 'run.json').write_text(json.dumps({
             'key': run_key, 'model': key, 'init': init, 'fetchedAt': fetched, 'source': model_id,
             'steps': step_docs, 'wind': f'{key}/{run_key}/wind.json', 'points': f'{key}/{run_key}/points.json',
+            'accum': f'{key}/{run_key}/accum.json',
         }, indent=1) + '\n', encoding='utf-8')
         if run_dir.exists():
             shutil.rmtree(run_dir)
@@ -510,9 +587,19 @@ def write_ensemble_run(fetched: str, pacer: Pacer) -> tuple[str, str] | None:
         'model': key, 'label': label, 'init': init, 'fetchedAt': fetched, 'members': len(members),
         'cellDeg': ENS_GRID[4], 'points': points,
     }, separators=(',', ':')) + '\n', encoding='utf-8')
+    # Each member's wettest day in the Outlook window, per cell: the numbers the Outlook's rain
+    # likelihood is counted from. Kept per member rather than as a share over a threshold, so the
+    # threshold lives in one place (`scripts/outlook.py`) and can change without a refetch.
+    ws = window_start(init, fetched)
+    idx = window_indices(times, ws)
+    (tmp / 'accum.json').write_text(json.dumps(accum_doc(
+        key, init, fetched, ws, ENS_GRID, members=len(members), memberKeys=members,
+        wettest24=[[wettest_span(loc['hourly'][m], idx) for m in members] for loc in locs],
+    ), separators=(',', ':')) + '\n', encoding='utf-8')
     run_doc = {
         'key': run_key, 'model': key, 'init': init, 'fetchedAt': fetched, 'source': f'{model_id} ensemble',
         'members': len(members), 'steps': step_docs, 'points': f'{key}/{run_key}/points.json',
+        'accum': f'{key}/{run_key}/accum.json',
     }
     (tmp / 'run.json').write_text(json.dumps(run_doc, indent=1) + '\n', encoding='utf-8')
     if run_dir.exists():

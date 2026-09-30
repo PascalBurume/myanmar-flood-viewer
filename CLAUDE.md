@@ -350,8 +350,9 @@ Traps recorded:
   figure in some tool result.
 - **A nullable enum is a hard 400** (`check_chat_tools.mjs`), so `set_view_timeline` uses a `'keep'`
   sentinel rather than null — the same shape `layer_reference` uses with `'all'`.
-- **The strict-tool budget is now full at 20/20.** The next tool must be non-strict (validating in
-  its handler) or replace one. WeatherNext needs none: it is a `model` enum value in both new tools.
+- **The strict-tool budget was full at 20/20**, and is now 19/20: `show_chart` went non-strict
+  when the Outlook was added (see "Tool definitions are checked"). The next tool should still be
+  non-strict, validating in its handler. WeatherNext needs none: it is a `model` enum value in both new tools.
 - **The Weather pane is a third `panel-body`**, `hidden`-toggled like the other two, so the
   `[hidden]` override and the collapsed-panel rule already cover it and each view keeps its scroll.
 - **The legend follows `field.on`, not the view**: a forecast carries its model and run time
@@ -477,6 +478,60 @@ Traps recorded:
 
 The page now also contacts the Terrarium terrain tiles — map tiles, public and keyless like the
 others — and only in this view. Footprints are never fetched at runtime; they are committed.
+
+## The Outlook view
+
+`?view=outlook`: where the next five days could bring flooding, per township. Built at the owner's
+request for "which region we may predict the catastrophe", and for what makes this viewer unlike
+the others. It joins the one thing only this project holds, four years of **radar-observed** flood
+history for 328 townships, to the forecast ensembles. `scripts/outlook.py` → `public/data/outlook.json`;
+`src/outlook.ts` (types, colours, lines), `src/components/Outlook.tsx` (the pane).
+
+**A matrix, not a score.** Likelihood (forecast) and impact (observed) stay two figures, combined
+in a 4×4 matrix modelled on the UK Flood Forecasting Centre's. A single number would read as a
+calibrated probability of flooding, and nothing here is calibrated.
+
+- **Likelihood** is the share of 51 ECMWF ensemble members whose wettest rolling 24 h in the next
+  120 h reaches **64.5 mm** at the township's 1° cell (IMD's "heavy" line; DMH publishes no numeric
+  scale to cite). Within **25 km** of a gauge cell, it is the share of 51 GloFAS members over that
+  gauge's **2-year flow**, if larger.
+- **Impact** is the most people UNOSAT's radar saw under water in the township on one pass,
+  2022–2026. The 25 observations `history.json` withholds (`service` + `date`) are withheld here too.
+- **Every rule travels in the file** (`method`: thresholds, bands, the matrix), and the pane and
+  key draw from it. The client carries no copy, for the same reason as the field's `LEGENDS`.
+
+Constraints recorded:
+
+- **Unknown impact is never "minimal".** A township whose every pass is withheld has `level: null`
+  and is drawn as a hollow ring. `test_outlook.py` pins it.
+- **The very-low likelihood row is all very low.** Otherwise every township flooded badly once
+  would carry a colour on every dry day, and the map would stop meaning anything.
+- **The window starts when the forecast was read, not at its init** (`window_start()`). An 00Z
+  ensemble read at 15Z has already "forecast" fifteen hours that have now happened.
+- **The PNG frames hold classes, not millimetres**, so the amounts cannot be read back out of them.
+  `scan_forecast_field.py` writes `accum.json` beside each new run from the hourly series while it
+  is still in memory: per member for the ensemble (so the threshold lives only in `outlook.py`),
+  total and wettest day for the deterministic models. That costs **no extra calls**, and run
+  directories stay write-once. Runs written before this have no `accum.json`, and the stage says so.
+- **River thresholds are the same model at the same cell.** `scripts/river_climatology.py` fits
+  Gumbel (method of moments) to annual maxima, 2000–2024, May–Nov, from GloFAS's reanalysis at the
+  eight channel cells, which is how GloFAS sets its own thresholds. The reanalysis here starts
+  between 1995 and 2000 (1985/1990/1995 return null). All maxima fell in June–October (`peakMonths`).
+  It costs about 3,000 calls, so it is **built once and committed** (`data/river_climatology.json`).
+  Hinthada: 2-year 44,132 m³/s, against 52,118 in 2015.
+- **Counted per member, not from the ensemble maximum.** "1 of 51 touches the 2-year flow" and
+  "51 of 51 do" have the same maximum.
+- **The exposure circles are hidden on this view**, not dimmed. Their orange read as the Outlook's
+  amber, and the Outlook's own dots carry impact by size.
+- **The view-switch pill is sized per button** (`width: calc((100% - 6px) / 4)` plus a `:has()` rule
+  per position). Adding the fourth button without touching it left the pill a third wide.
+- The UNOSAT per-township fetch is ~45 s. The last good copy is kept in
+  `data/township_history_cache.json` (gitignored) for when UNOSAT is down.
+- The stage is gated like every other: past `SCAN_UNTIL` it does not run.
+
+The assistant reads it through `flood_outlook` (non-strict). `system.md` forbids turning the share
+into "a N% chance" or the impact into "N people will be affected": both are what the Refusals
+section already rules out, and the Outlook does not change that.
 
 ## Monitoring
 
@@ -685,6 +740,19 @@ strict tools against a limit of **20**, a schema with no handler, and a strict t
 missing from `required`. So the rules live in `scripts/check_chat_tools.mjs`, which runs first in
 `npm run build` — before `tsc`, before vite — and names the tool and the fix.
 
+Two more were found when the Outlook was added (Sept 2026). The assistant was failing on **every**
+question before that change, not because of it:
+
+- **At most 16 union-typed parameters** (`["string","null"]`, `anyOf`). The tools had reached 17.
+  The checker now counts them (`MAX_UNIONS`). `set_view_timeline.validTime` takes an empty string
+  for "leave it" instead of null, which its handler already accepted.
+- **"The compiled grammar is too large"** has no published number, so it cannot be checked. It gave
+  way when `show_chart`, whose nested rows of nullable fields were the heaviest schema, went
+  non-strict. Its handler now checks each row itself and drops a malformed one rather than drawing
+  it. The next strict tool with nested objects is the likeliest to bring this back.
+- The first request after a schema change can take longer than the server's 30 s time-to-first-byte
+  while the grammar compiles, and surfaces as "lost the connection". A retry is served from cache.
+
 The one related check that *is* the compiler's job stays there: `TOOL_LABEL` in `Assistant.tsx` is
 typed `Record<ToolName, string>`, with `ToolName` derived from the `HANDLERS` object via
 `satisfies`, so adding a tool without a reader-facing label is a compile error. It had shipped raw
@@ -855,6 +923,7 @@ not a pipeline. Python's `zipfile` stands in for `unzip`.
 - [x] audit and repair the Weather view: step timing, one shared moment, opening on now, intensity strip, point forecast, legible wind, mobile layout, motion
 - [x] smooth Weather Lab-style rain rendering with density and show/hide
 - [x] add the 3D view: terrain, people-exposed columns, and flood scenes with building footprints and an observed-anchored fill simulation
+- [x] add the Outlook view: forecast likelihood (ECMWF + GloFAS ensembles, river return flows) against radar-observed impact, per township
 - [ ] WeatherNext 3 gridded field + ensemble cyclone tracks once Google allow-list access arrives (phases 2–3)
 - [ ] decide whether to extend or stop the scan when `SCAN_UNTIL` (2026-09-14) is reached
 - [ ] add drawing code if a new layer kind arrives (anything outside `LAYER_KINDS`:

@@ -79,6 +79,7 @@ PLAN = [
     ('weather', 'Rain & rivers'),
     ('cyclones', 'Tropical cyclones'),
     ('field', 'Forecast field'),
+    ('outlook', 'Flood outlook'),
     ('weathernext', 'WeatherNext 3 field'),
     ('publish', 'Build & publish'),
     ('status', 'Write status'),
@@ -272,6 +273,29 @@ def stage_field(stages: list[Stage]) -> None:
     st.finish('ok', wrote.replace('wrote field: ', '') or 'refreshed')
 
 
+def stage_outlook(stages: list[Stage]) -> None:
+    """The Flood Outlook: forecast likelihood against observed impact, per township. Never fatal.
+
+    Runs after the field and the rivers because it reads both from disk. It spends no forecast calls
+    of its own; the one request it makes is to UNOSAT's archive, with the last good copy kept for
+    when that is down. A run with no accumulated ensemble yet records `skipped`, with the reason.
+    """
+    st = Stage('outlook', 'Flood outlook (likelihood x impact)')
+    stages.append(st)
+    proc = run([sys.executable, 'scripts/outlook.py'])
+    out = (proc.stdout or '') + (proc.stderr or '')
+    print(out.rstrip())
+    skipped = next((l for l in out.splitlines() if l.startswith('skipped:')), '')
+    if skipped:
+        st.finish('skipped', skipped.replace('skipped: ', ''))
+        return
+    if proc.returncode != 0:
+        st.finish('skipped', 'outlook unavailable; the flood data is unaffected')
+        return
+    wrote = next((l for l in out.splitlines() if l.startswith('wrote outlook.json')), '')
+    st.finish('ok', wrote.replace('wrote outlook.json: ', '') or 'refreshed')
+
+
 def stage_weathernext(stages: list[Stage]) -> None:
     """The WeatherNext 3 forecast field — gated on credentials, libraries and accepted terms.
 
@@ -418,6 +442,7 @@ def main() -> int:
             stage_weather(stages)
             stage_cyclones(stages)
             stage_field(stages)
+            stage_outlook(stages)
             stage_weathernext(stages)
     else:
         floodai_state = adam_state = 'skipped'

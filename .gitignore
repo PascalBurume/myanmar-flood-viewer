@@ -24,3 +24,7 @@ public/data/field/
 # Terrain tiles and building footprints downloaded by scripts/build_scenes.py. Tens of MB, and
 # re-fetchable; the scenes built from them are committed.
 data/cache/
+
+# The Outlook's copy of the UNOSAT per-township archive, kept only as a fallback for when UNOSAT is
+# down; rebuilt by scripts/outlook.py on every run.
+data/township_history_cache.json
